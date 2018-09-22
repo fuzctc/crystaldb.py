@@ -9,13 +9,52 @@
 # ***********************************************************************
 
 from threading import local as threadlocal
-from .py3 import (iteritems, iterkeys, itervalues)
+from .compat import (iteritems, iterkeys, itervalues, is_iter, imap, PY2,
+                     text_type)
+
+
+def safeunicode(obj, encoding='utf-8'):
+    """
+    Converts any given object to unicode string.
+
+        >>> safeunicode('hello')
+        u'hello'
+        >>> safeunicode(2)
+        u'2'
+        >>> safeunicode('\xe1\x88\xb4')
+        u'\u1234'
+    """
+    t = type(obj)
+    if t is text_type:
+        return obj
+    elif t is bytes:
+        return obj.decode(encoding)
+    elif t in [int, float, bool]:
+        return unicode(obj)
+    else:
+        return unicode(obj)
+
+
+def safestr(obj, encoding='utf-8'):
+    """
+    Converts any given object to utf-8 encoded string.
+
+        >>> safestr('hello')
+        'hello'
+        >>> safestr(2)
+        '2'
+    """
+    if PY2 and isinstance(obj, unicode):
+        return obj.encode(encoding)
+    elif is_iter(obj):
+        return imap(safestr, obj)
+    else:
+        return str(obj)
 
 
 class ThreadedDict(threadlocal):
     """
     Thread local storage.
-
         >>> d = ThreadedDict()
         >>> d.x = 1
         >>> d.x
