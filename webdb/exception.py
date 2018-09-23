@@ -21,3 +21,14 @@ class UnknownParamstyle(Exception):
     (currently supported: qmark, numeric, format, pyformat)
     """
     pass
+
+
+class _ItplError(ValueError):
+    def __init__(self, text, pos):
+        ValueError.__init__(self)
+        self.text = text
+        self.pos = pos
+
+    def __str__(self):
+        return "unfinished expression in %s at char %d" % (repr(self.text),
+                                                           self.pos)

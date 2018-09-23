@@ -8,12 +8,30 @@
 #
 # ***********************************************************************
 
+from __future__ import print_function
 import os
 import time
 import datetime
-from .utils import (threadeddict, safestr, safeunicode)
-from .exception import UnknownParamstyle
+import re
+from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter)
+from .exception import UnknownParamstyle, _ItplError
 from .compat import string_types, numeric_types, PY2
+
+try:
+    from urllib import parse as urlparse
+    from urllib.parse import unquote
+except ImportError:
+    import urlparse
+    from urllib import unquote
+
+try:
+    import ast
+except ImportError:
+    ast = None
+
+TOKEN = '[ \\f\\t]*(\\\\\\r?\\n[ \\f\\t]*)*(#[^\\r\\n]*)?(((\\d+[jJ]|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)[jJ])|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)|(0[xX][\\da-fA-F]+[lL]?|0[bB][01]+[lL]?|(0[oO][0-7]+)|(0[0-7]*)[lL]?|[1-9]\\d*[lL]?))|((\\*\\*=?|>>=?|<<=?|<>|!=|//=?|[+\\-*/%&|^=<>]=?|~)|[][(){}]|(\\r?\\n|[:;.,`@]))|([uUbB]?[rR]?\'[^\\n\'\\\\]*(?:\\\\.[^\\n\'\\\\]*)*\'|[uUbB]?[rR]?"[^\\n"\\\\]*(?:\\\\.[^\\n"\\\\]*)*")|[a-zA-Z_]\\w*)'
+
+tokenprog = re.compile(TOKEN)
 
 
 def sqlify(obj):
@@ -259,6 +277,160 @@ class SQLQuery(object):
         return '<sql: %s>' % repr(str(self))
 
 
+def sqlquote(a):
+    """
+    Ensures `a` is quoted properly for use in a SQL query.
+
+        >>> 'WHERE x = ' + sqlquote(True) + ' AND y = ' + sqlquote(3)
+        <sql: "WHERE x = 't' AND y = 3">
+        >>> 'WHERE x = ' + sqlquote(True) + ' AND y IN ' + sqlquote([2, 3])
+        <sql: "WHERE x = 't' AND y IN (2, 3)">
+    """
+    if isinstance(a, list):
+        return _sqllist(a)
+    else:
+        return sqlparam(a).sqlquery()
+
+
+class _Node(object):
+    def __init__(self, type, first, second=None):
+        self.type = type
+        self.first = first
+        self.second = second
+
+    def __eq__(self, other):
+        return (isinstance(other, _Node) and self.type == other.type and
+                self.first == other.first and self.second == other.second)
+
+    def __repr__(self):
+        return "Node(%r, %r, %r)" % (self.type, self.first, self.second)
+
+
+class Parser:
+    """Parser to parse string templates like "Hello $name".
+
+    Loosely based on <http://lfw.org/python/Itpl.py> (public domain, Ka-Ping Yee)
+    """
+    namechars = "abcdefghijklmnopqrstuvwxyz" \
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.pos = 0
+        self.level = 0
+        self.text = ""
+        self.format = ""
+
+    def parse(self, text, _format="$"):
+        """Parses the given text and returns a parse tree.
+        """
+        self.reset()
+        self.text = text
+        self._format = _format
+        return self.parse_all()
+
+    def parse_all(self):
+        while True:
+            dollar = self.text.find(self._format, self.pos)
+            if dollar < 0:
+                break
+            nextchar = self.text[dollar + 1]
+            if nextchar in self.namechars:
+                yield _Node("text", self.text[self.pos:dollar])
+                self.pos = dollar + 1
+                yield self.parse_expr()
+
+            # for supporting ${x.id}, for backward compataility
+            elif nextchar == '{':
+                saved_pos = self.pos
+                self.pos = dollar + 2  # skip "${"
+                expr = self.parse_expr()
+                if self.text[self.pos] == '}':
+                    self.pos += 1
+                    yield _Node("text", self.text[self.pos:dollar])
+                    yield expr
+                else:
+                    self.pos = saved_pos
+                    break
+            else:
+                yield _Node("text", self.text[self.pos:dollar + 1])
+                self.pos = dollar + 1
+                # $$ is used to escape $
+                if nextchar == self._format:
+                    self.pos += 1
+
+        if self.pos < len(self.text):
+            yield _Node("text", self.text[self.pos:])
+
+    def match(self):
+        match = tokenprog.match(self.text, self.pos)
+        if match is None:
+            raise _ItplError(self.text, self.pos)
+        return match, match.end()
+
+    def is_literal(self, text):
+        return text and text[0] in "0123456789\"'"
+
+    def parse_expr(self):
+        match, pos = self.match()
+        if self.is_literal(match.group()):
+            expr = _Node("literal", match.group())
+        else:
+            expr = _Node("param", self.text[self.pos:pos])
+        self.pos = pos
+        while self.pos < len(self.text):
+            if self.text[self.pos] == "." and \
+                self.pos + 1 < len(self.text) and \
+               self.text[self.pos + 1] in self.namechars:
+                self.pos += 1
+                match, pos = self.match()
+                attr = match.group()
+                expr = _Node("getattr", expr, attr)
+                self.pos = pos
+            elif self.text[self.pos] == "[":
+                saved_pos = self.pos
+                self.pos += 1
+                key = self.parse_expr()
+                if self.text[self.pos] == ']':
+                    self.pos += 1
+                    expr = _Node("getitem", expr, key)
+                else:
+                    self.pos = saved_pos
+                    break
+            else:
+                break
+        return expr
+
+
+class SafeEval(object):
+    """Safe evaluator for binding params to db queries.
+    """
+
+    def safeeval(self, text, mapping):
+        nodes = Parser().parse(text)
+        return SQLQuery.join([self.eval_node(node, mapping)
+                              for node in nodes], "")
+
+    def eval_node(self, node, mapping):
+        if node.type == "text":
+            return node.first
+        else:
+            return sqlquote(self.eval_expr(node, mapping))
+
+    def eval_expr(self, node, mapping):
+        if node.type == "literal":
+            return ast.literal_eval(node.first)
+        elif node.type == "getattr":
+            return getattr(self.eval_expr(node.first, mapping), node.second)
+        elif node.type == "getitem":
+            return self.eval_expr(
+                node.first, mapping)[self.eval_expr(node.second, mapping)]
+        elif node.type == "param":
+            return mapping[node.first]
+
+
 class SQLLiteral:
     """
     Protects a string from `sqlquote`.
@@ -320,7 +492,12 @@ class DB(object):
 
         self._ctx = threadeddict()
         # flag to enable/disable printing queries
-        self.print_flag = params.get('debug', os.environ.get('debug', False))
+        self.print_flag = False
+        if "debug" in params:
+            self.print_flag = params.get('debug')
+            del params["debug"]
+        else:
+            self.print_flag = os.environ.get('debug', False)
         self.supports_multiple_insert = False
 
     def _getctx(self):
@@ -334,7 +511,7 @@ class DB(object):
         ctx.dbq_count = 0
         ctx.transactions = []  # stack of transactions
 
-        ctx.db = self._connect(self.keywords)
+        ctx.db = self._connect(self.params)
         ctx.db_execute = self._db_execute
 
         if not hasattr(ctx.db, 'commit'):
@@ -406,12 +583,56 @@ class DB(object):
         params = sql_query.values()
         return query, params
 
+    def query(self, sql_query, vars=None, processed=False, _test=False):
+        """
+        Execute SQL query `sql_query` using dictionary `vars` to interpolate it.
+        If `processed=True`, `vars` is a `reparam`-style list to use
+        instead of interpolating.
+            >>> db = DB(None, {})
+            >>> db.query("SELECT * FROM foo", _test=True)
+            <sql: 'SELECT * FROM foo'>
+            >>> db.query("SELECT * FROM foo WHERE x = $x", vars=dict(x='f'), _test=True)
+            <sql: "SELECT * FROM foo WHERE x = 'f'">
+            >>> db.query("SELECT * FROM foo WHERE x = " + sqlquote('f'), _test=True)
+            <sql: "SELECT * FROM foo WHERE x = 'f'">
+        """
+        if vars is None:
+            vars = {}
+
+        if not processed and not isinstance(sql_query, SQLQuery):
+            sql_query = reparam(sql_query, vars)
+
+        if _test:
+            return sql_query
+
+        db_cursor = self._db_cursor()
+        self._db_execute(db_cursor, sql_query)
+
+        if db_cursor.description:
+            names = [x[0] for x in db_cursor.description]
+
+            def iterwrapper():
+                row = db_cursor.fetchone()
+                while row:
+                    yield storage(dict(zip(names, row)))
+                    row = db_cursor.fetchone()
+
+            out = iterbetter(iterwrapper())
+            out.__len__ = lambda: int(db_cursor.rowcount)
+            out.list = lambda: [storage(dict(zip(names, x)))
+                                for x in db_cursor.fetchall()]
+        else:
+            out = db_cursor.rowcount
+
+        if not self.ctx.transactions:
+            self.ctx.commit()
+        return out
+
 
 class MySQLDB(DB):
     """MySQLDB"""
 
     def __init__(self, **params):
-
         db = import_driver(
             ["MySQLdb", "pymysql", "mysql.connector"],
             preferred=params.pop('driver', None))
@@ -419,7 +640,6 @@ class MySQLDB(DB):
             if 'passwd' in params:
                 params['password'] = params['passwd']
                 del params['passwd']
-
         if 'charset' not in params:
             params['charset'] = 'utf8'
         elif params['charset'] is None:
@@ -427,7 +647,7 @@ class MySQLDB(DB):
 
         self.paramstyle = db.paramstyle = 'pyformat'  # it's both, like psycopg
         self.dbname = "mysql"
-        super(DB, self).__init__(self, db, params)
+        DB.__init__(self, db, params)
         self.supports_multiple_insert = True
 
     #def _process_insert_query(self, query, tablename, seqname):
