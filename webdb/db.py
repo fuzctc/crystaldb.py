@@ -299,8 +299,8 @@ class _Node(object):
         self.second = second
 
     def __eq__(self, other):
-        return (isinstance(other, _Node) and self.type == other.type and
-                self.first == other.first and self.second == other.second)
+        return (isinstance(other, _Node) and self.type == other.type
+                and self.first == other.first and self.second == other.second)
 
     def __repr__(self):
         return "Node(%r, %r, %r)" % (self.type, self.first, self.second)
@@ -410,8 +410,8 @@ class SafeEval(object):
 
     def safeeval(self, text, mapping):
         nodes = Parser().parse(text)
-        return SQLQuery.join([self.eval_node(node, mapping)
-                              for node in nodes], "")
+        return SQLQuery.join([self.eval_node(node, mapping) for node in nodes],
+                             "")
 
     def eval_node(self, node, mapping):
         if node.type == "text":
@@ -425,8 +425,8 @@ class SafeEval(object):
         elif node.type == "getattr":
             return getattr(self.eval_expr(node.first, mapping), node.second)
         elif node.type == "getitem":
-            return self.eval_expr(
-                node.first, mapping)[self.eval_expr(node.second, mapping)]
+            return self.eval_expr(node.first, mapping)[self.eval_expr(
+                node.second, mapping)]
         elif node.type == "param":
             return mapping[node.first]
 
@@ -627,6 +627,50 @@ class DB(object):
         if not self.ctx.transactions:
             self.ctx.commit()
         return out
+
+
+class BaseTable(object):
+    def __init__(self, table_name):
+        self.table_name = table_name
+
+
+class BaseWriteQuery(object):
+
+    pass
+
+
+class Insert(BaseWriteQuery):
+    pass
+
+
+class Update(BaseWriteQuery):
+    pass
+
+
+class BaseSelect(object):
+    pass
+
+
+class Select(BaseSelect):
+    pass
+
+
+class Table(BaseTable):
+    def __init__(self, database, table_name):
+        self.ctx = database
+        super(Table, self).__init__(table_name)
+
+    def insert(self, **kwargs):
+        pass
+
+    def insert_duplicate_update(self, data, conditions, **kwargs):
+        pass
+
+    def update(self, data, conditions, **kwargs):
+        pass
+
+    def select(self, **kwargs):
+        pass
 
 
 class MySQLDB(DB):
