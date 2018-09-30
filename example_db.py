@@ -9,8 +9,8 @@ class TestDB():
     db_host = '127.0.0.1'
     db_port = 3306
     db_user = 'root'
-    db_pass = 'fuzc'
-    db_database = 'meitu'
+    db_pass = 'meitu123'
+    db_database = 'webdb'
 
     def __init__(self):
         pass
@@ -42,8 +42,16 @@ class TestDB():
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
     print(db_handle)
-    sql = """select * from test_user where id=$id"""
-    params = {"id": 1}
-    query_result = db_handle.query(sql, params)
-    print(query_result)
-    print(query_result.list())
+    #sql = """select * from ab_user_01 where id=$id"""
+    #params = {"id": 1}
+    #query_result = db_handle.query(sql, params)
+    #print(query_result)
+    #print(query_result.list())
+    #print(db_handle.select_v2("ab_user_01").get(id=1).list())
+    #print(db_handle.select_v2("ab_user_01").count(id=1))
+    print(db_handle.select_v2("user").lt(id=5).gt(id=2).all().list())
+    print(db_handle.select_v2("user").lte(id=5).gte(id=2).all().list())
+    print(db_handle.select_v2("user").between(id=[2, 5]).all().list())
+    print(db_handle.select_v2("user").eq(id=2).all().list())
+    print(db_handle.select_v2("user").gt(id=2).filter(gender="girl").query().list())
+    print(db_handle.select_v2("user").lt(id=5, age=25).all().list())

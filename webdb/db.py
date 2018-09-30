@@ -15,7 +15,7 @@ import datetime
 import re
 from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter)
 from .exception import UnknownParamstyle, _ItplError
-from .compat import string_types, numeric_types, PY2
+from .compat import string_types, numeric_types, PY2, iteritems
 
 try:
     from urllib import parse as urlparse
@@ -64,6 +64,36 @@ def sqlify(obj):
             obj = obj.encode('utf8')
 
         return repr(obj)
+
+
+def sqllist(lst):
+    """
+    Converts the arguments for use in something like a WHERE clause.
+    
+        >>> sqllist(['a', 'b'])
+        'a, b'
+        >>> sqllist('a')
+        'a'
+    """
+    if isinstance(lst, string_types):
+        return lst
+    else:
+        return ', '.join(lst)
+
+
+def sqlwhere(data, grouping=' AND '):
+    """
+    Converts a two-tuple (key, value) iterable `data` to an SQL WHERE clause `SQLQuery`.
+    
+        >>> sqlwhere((('cust_id', 2), ('order_id',3)))
+        <sql: 'cust_id = 2 AND order_id = 3'>
+        >>> sqlwhere((('order_id', 3), ('cust_id', 2)), grouping=', ')
+        <sql: 'order_id = 3, cust_id = 2'>
+        >>> sqlwhere((('a', 'a'), ('b', 'b'))).query()
+        'a = %s AND b = %s'
+    """
+
+    return SQLQuery.join([k + ' = ' + sqlparam(v) for k, v in data], grouping)
 
 
 class SQLParam(object):
@@ -479,6 +509,80 @@ def reparam(string_, dictionary):
     return SafeEval().safeeval(string_, dictionary)
 
 
+class Transaction:
+    """Database transaction."""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.transaction_count = transaction_count = len(ctx.transactions)
+
+        class transaction_engine:
+            """Transaction Engine used in top level transactions."""
+
+            def do_transact(self):
+                ctx.commit(unload=False)
+
+            def do_commit(self):
+                ctx.commit()
+
+            def do_rollback(self):
+                ctx.rollback()
+
+        class subtransaction_engine:
+            """Transaction Engine used in sub transactions."""
+
+            def query(self, q):
+                db_cursor = ctx.db.cursor()
+                ctx.db_execute(db_cursor, SQLQuery(q % transaction_count))
+
+            def do_transact(self):
+                self.query('SAVEPOINT webpy_sp_%s')
+
+            def do_commit(self):
+                self.query('RELEASE SAVEPOINT webpy_sp_%s')
+
+            def do_rollback(self):
+                self.query('ROLLBACK TO SAVEPOINT webpy_sp_%s')
+
+        class dummy_engine:
+            """Transaction Engine used instead of subtransaction_engine 
+            when sub transactions are not supported."""
+            do_transact = do_commit = do_rollback = lambda self: None
+
+        if self.transaction_count:
+            # nested transactions are not supported in some databases
+            if self.ctx.get('ignore_nested_transactions'):
+                self.engine = dummy_engine()
+            else:
+                self.engine = subtransaction_engine()
+        else:
+            self.engine = transaction_engine()
+
+        self.engine.do_transact()
+        self.ctx.transactions.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exctype, excvalue, traceback):
+        if exctype is not None:
+            self.rollback()
+        else:
+            self.commit()
+
+    def commit(self):
+        if len(self.ctx.transactions) > self.transaction_count:
+            self.engine.do_commit()
+            self.ctx.transactions = self.ctx.transactions[:self.
+                                                          transaction_count]
+
+    def rollback(self):
+        if len(self.ctx.transactions) > self.transaction_count:
+            self.engine.do_rollback()
+            self.ctx.transactions = self.ctx.transactions[:self.
+                                                          transaction_count]
+
+
 class DB(object):
     """Database"""
 
@@ -583,6 +687,30 @@ class DB(object):
         params = sql_query.values()
         return query, params
 
+    def _where(self, where, vars):
+        if isinstance(where, numeric_types):
+            where = "id = " + sqlparam(where)
+        #@@@ for backward-compatibility
+        elif isinstance(where, (list, tuple)) and len(where) == 2:
+            where = SQLQuery(where[0], where[1])
+        elif isinstance(where, dict):
+            where = self._where_dict(where)
+        elif isinstance(where, SQLQuery):
+            pass
+        else:
+            where = reparam(where, vars)
+        return where
+
+    def _where_dict(self, where):
+        where_clauses = []
+
+        for k, v in sorted(iteritems(where), key=lambda t: t[0]):
+            where_clauses.append(k + ' = ' + sqlquote(v))
+        if where_clauses:
+            return SQLQuery.join(where_clauses, " AND ")
+        else:
+            return None
+
     def query(self, sql_query, vars=None, processed=False, _test=False):
         """
         Execute SQL query `sql_query` using dictionary `vars` to interpolate it.
@@ -628,14 +756,313 @@ class DB(object):
             self.ctx.commit()
         return out
 
+    def select_v2(self, tables, fields=None):
+        return Select(self, tables, fields)
 
-class BaseTable(object):
-    def __init__(self, table_name):
-        self.table_name = table_name
+    def select(self,
+               tables,
+               vars=None,
+               what='*',
+               where=None,
+               order=None,
+               group=None,
+               limit=None,
+               offset=None,
+               _test=False):
+        """
+        Selects `what` from `tables` with clauses `where`, `order`, 
+        `group`, `limit`, and `offset`. Uses vars to interpolate. 
+        Otherwise, each clause can be a SQLQuery.
+        
+            >>> db = DB(None, {})
+            >>> db.select('foo', _test=True)
+            <sql: 'SELECT * FROM foo'>
+            >>> db.select(['foo', 'bar'], where="foo.bar_id = bar.id", limit=5, _test=True)
+            <sql: 'SELECT * FROM foo, bar WHERE foo.bar_id = bar.id LIMIT 5'>
+            >>> db.select('foo', where={'id': 5}, _test=True)
+            <sql: 'SELECT * FROM foo WHERE id = 5'>
+        """
+        if vars is None: vars = {}
+        sql_clauses = self.sql_clauses(what, tables, where, group, order,
+                                       limit, offset)
+        clauses = [
+            self.gen_clause(sql, val, vars) for sql, val in sql_clauses
+            if val is not None
+        ]
+        qout = SQLQuery.join(clauses)
+        if _test: return qout
+        return self.query(qout, processed=True)
+
+    def where(self,
+              table,
+              what='*',
+              order=None,
+              group=None,
+              limit=None,
+              offset=None,
+              _test=False,
+              **kwargs):
+        """
+        Selects from `table` where keys are equal to values in `kwargs`.
+        
+            >>> db = DB(None, {})
+            >>> db.where('foo', bar_id=3, _test=True)
+            <sql: 'SELECT * FROM foo WHERE bar_id = 3'>
+            >>> db.where('foo', source=2, crust='dewey', _test=True)
+            <sql: "SELECT * FROM foo WHERE crust = 'dewey' AND source = 2">
+            >>> db.where('foo', _test=True)
+            <sql: 'SELECT * FROM foo'>
+        """
+        where = self._where_dict(kwargs)
+        return self.select(
+            table,
+            what=what,
+            order=order,
+            group=group,
+            limit=limit,
+            offset=offset,
+            _test=_test,
+            where=where)
+
+    def sql_clauses(self, what, tables, where, group, order, limit, offset):
+        return (
+            ('SELECT', what),
+            ('FROM', sqllist(tables)),
+            ('WHERE', where),
+            ('GROUP BY', group),
+            ('ORDER BY', order),
+            # The limit and offset could be the values provided by
+            # the end-user and are potentially unsafe.
+            # Using them as parameters to avoid any risk.
+            ('LIMIT', limit and SQLParam(limit).sqlquery()),
+            ('OFFSET', offset and SQLParam(offset).sqlquery()))
+
+    def gen_clause(self, sql, val, vars):
+        if isinstance(val, numeric_types):
+            if sql == 'WHERE':
+                nout = 'id = ' + sqlquote(val)
+            else:
+                nout = SQLQuery(val)
+        #@@@
+        elif isinstance(val, (list, tuple)) and len(val) == 2:
+            nout = SQLQuery(val[0], val[1])  # backwards-compatibility
+        elif sql == 'WHERE' and isinstance(val, dict):
+            nout = self._where_dict(val)
+        elif isinstance(val, SQLQuery):
+            nout = val
+        else:
+            nout = reparam(val, vars)
+
+        def xjoin(a, b):
+            if a and b: return a + ' ' + b
+            else: return a or b
+
+        return xjoin(sql, nout)
+
+    def insert(self, tablename, seqname=None, _test=False, **values):
+        """
+        Inserts `values` into `tablename`. Returns current sequence ID.
+        Set `seqname` to the ID if it's not the default, or to `False`
+        if there isn't one.
+        
+            >>> db = DB(None, {})
+            >>> q = db.insert('foo', name='bob', age=2, created=SQLLiteral('NOW()'), _test=True)
+            >>> q
+            <sql: "INSERT INTO foo (age, created, name) VALUES (2, NOW(), 'bob')">
+            >>> q.query()
+            'INSERT INTO foo (age, created, name) VALUES (%s, NOW(), %s)'
+            >>> q.values()
+            [2, 'bob']
+        """
+
+        def q(x):
+            return "(" + x + ")"
+
+        if values:
+            #needed for Py3 compatibility with the above doctests
+            sorted_values = sorted(values.items(), key=lambda t: t[0])
+
+            _keys = SQLQuery.join(map(lambda t: t[0], sorted_values), ', ')
+            _values = SQLQuery.join(
+                [sqlparam(v) for v in map(lambda t: t[1], sorted_values)],
+                ', ')
+            sql_query = "INSERT INTO %s " % tablename + q(
+                _keys) + ' VALUES ' + q(_values)
+        else:
+            sql_query = SQLQuery(
+                self._get_insert_default_values_query(tablename))
+
+        if _test: return sql_query
+
+        db_cursor = self._db_cursor()
+        if seqname is not False:
+            sql_query = self._process_insert_query(sql_query, tablename,
+                                                   seqname)
+
+        if isinstance(sql_query, tuple):
+            # for some databases, a separate query has to be made to find
+            # the id of the inserted row.
+            q1, q2 = sql_query
+            self._db_execute(db_cursor, q1)
+            self._db_execute(db_cursor, q2)
+        else:
+            self._db_execute(db_cursor, sql_query)
+
+        try:
+            out = db_cursor.fetchone()[0]
+        except Exception:
+            out = None
+
+        if not self.ctx.transactions:
+            self.ctx.commit()
+
+        return out
+
+    def _get_insert_default_values_query(self, table):
+        return "INSERT INTO %s DEFAULT VALUES" % table
+
+    def multiple_insert(self, tablename, values, seqname=None, _test=False):
+        """
+        Inserts multiple rows into `tablename`. The `values` must be a list of dictioanries, 
+        one for each row to be inserted, each with the same set of keys.
+        Returns the list of ids of the inserted rows.        
+        Set `seqname` to the ID if it's not the default, or to `False`
+        if there isn't one.
+        
+            >>> db = DB(None, {})
+            >>> db.supports_multiple_insert = True
+            >>> values = [{"name": "foo", "email": "foo@example.com"}, {"name": "bar", "email": "bar@example.com"}]
+            >>> db.multiple_insert('person', values=values, _test=True)
+            <sql: "INSERT INTO person (email, name) VALUES ('foo@example.com', 'foo'), ('bar@example.com', 'bar')">
+        """
+        if not values:
+            return []
+
+        if not self.supports_multiple_insert:
+            out = [
+                self.insert(tablename, seqname=seqname, _test=_test, **v)
+                for v in values
+            ]
+            if seqname is False:
+                return None
+            else:
+                return out
+
+        keys = values[0].keys()
+        #@@ make sure all keys are valid
+
+        for v in values:
+            if v.keys() != keys:
+                raise ValueError('Not all rows have the same keys')
+
+        keys = sorted(
+            keys
+        )  #enforce query order for the above doctest compatibility with Py3
+
+        sql_query = SQLQuery('INSERT INTO %s (%s) VALUES ' % (tablename,
+                                                              ', '.join(keys)))
+
+        for i, row in enumerate(values):
+            if i != 0:
+                sql_query.append(", ")
+            SQLQuery.join(
+                [SQLParam(row[k]) for k in keys],
+                sep=", ",
+                target=sql_query,
+                prefix="(",
+                suffix=")")
+
+        if _test: return sql_query
+
+        db_cursor = self._db_cursor()
+        if seqname is not False:
+            sql_query = self._process_insert_query(sql_query, tablename,
+                                                   seqname)
+
+        if isinstance(sql_query, tuple):
+            # for some databases, a separate query has to be made to find
+            # the id of the inserted row.
+            q1, q2 = sql_query
+            self._db_execute(db_cursor, q1)
+            self._db_execute(db_cursor, q2)
+        else:
+            self._db_execute(db_cursor, sql_query)
+
+        try:
+            out = db_cursor.fetchone()[0]
+            out = range(out - len(values) + 1, out + 1)
+        except Exception:
+            out = None
+
+        if not self.ctx.transactions:
+            self.ctx.commit()
+        return out
+
+    def update(self, tables, where, vars=None, _test=False, **values):
+        """
+        Update `tables` with clause `where` (interpolated using `vars`)
+        and setting `values`.
+
+            >>> db = DB(None, {})
+            >>> name = 'Joseph'
+            >>> q = db.update('foo', where='name = $name', name='bob', age=2,
+            ...     created=SQLLiteral('NOW()'), vars=locals(), _test=True)
+            >>> q
+            <sql: "UPDATE foo SET age = 2, created = NOW(), name = 'bob' WHERE name = 'Joseph'">
+            >>> q.query()
+            'UPDATE foo SET age = %s, created = NOW(), name = %s WHERE name = %s'
+            >>> q.values()
+            [2, 'bob', 'Joseph']
+        """
+        if vars is None: vars = {}
+        where = self._where(where, vars)
+
+        values = sorted(values.items(), key=lambda t: t[0])
+
+        query = ("UPDATE " + sqllist(tables) + " SET " +
+                 sqlwhere(values, ', ') + " WHERE " + where)
+
+        if _test: return query
+
+        db_cursor = self._db_cursor()
+        self._db_execute(db_cursor, query)
+        if not self.ctx.transactions:
+            self.ctx.commit()
+        return db_cursor.rowcount
+
+    def delete(self, table, where, using=None, vars=None, _test=False):
+        """
+        Deletes from `table` with clauses `where` and `using`.
+
+            >>> db = DB(None, {})
+            >>> name = 'Joe'
+            >>> db.delete('foo', where='name = $name', vars=locals(), _test=True)
+            <sql: "DELETE FROM foo WHERE name = 'Joe'">
+        """
+        if vars is None: vars = {}
+        where = self._where(where, vars)
+
+        q = 'DELETE FROM ' + table
+        if using: q += ' USING ' + sqllist(using)
+        if where: q += ' WHERE ' + where
+
+        if _test: return q
+
+        db_cursor = self._db_cursor()
+        self._db_execute(db_cursor, q)
+        if not self.ctx.transactions:
+            self.ctx.commit()
+        return db_cursor.rowcount
+
+    def _process_insert_query(self, query, tablename, seqname):
+        return query
+
+    def transaction(self):
+        """Start a transaction."""
+        return Transaction(self.ctx)
 
 
 class BaseWriteQuery(object):
-
     pass
 
 
@@ -647,18 +1074,194 @@ class Update(BaseWriteQuery):
     pass
 
 
-class BaseSelect(object):
-    pass
+class MetaData(object):
+    def __init__(self, database, tables, _test=False):
+        self.database = database
+        self._tables = tables
+        self._where = None
+        self._what = None
+        self._group = None
+        self._order = None
+        self._limit = None
+        self._offset = None
+        self._test = _test
+
+    def _sql_clauses(self, what, tables, where, group, order, limit, offset):
+        return (
+            ('SELECT', what),
+            ('FROM', sqllist(tables)),
+            ('WHERE', where),
+            ('GROUP BY', group),
+            ('ORDER BY', order),
+            # The limit and offset could be the values provided by
+            # the end-user and are potentially unsafe.
+            # Using them as parameters to avoid any risk.
+            ('LIMIT', limit and SQLParam(limit).sqlquery()),
+            ('OFFSET', offset and SQLParam(offset).sqlquery()))
+
+    def _where_dict(self, where, opt="="):
+        where_clauses = []
+        for k, v in sorted(iteritems(where), key=lambda t: t[0]):
+            where_clauses.append(k + ' {} '.format(opt) + sqlquote(v))
+        if where_clauses:
+            return SQLQuery.join(where_clauses, " AND ")
+        else:
+            return None
+
+    def _gen_clause(self, sql, val, vars=None):
+        if isinstance(val, numeric_types):
+            if sql == 'WHERE':
+                nout = 'id = ' + sqlquote(val)
+            else:
+                nout = SQLQuery(val)
+        #@@@
+        elif isinstance(val, (list, tuple)) and len(val) == 2:
+            nout = SQLQuery(val[0], val[1])  # backwards-compatibility
+        elif sql == 'WHERE' and isinstance(val, dict):
+            nout = self._where_dict(val)
+        elif isinstance(val, SQLQuery):
+            nout = val
+        else:
+            nout = reparam(val, vars)
+
+        def xjoin(a, b):
+            if a and b:
+                return a + ' ' + b
+            else:
+                return a or b
+
+        return xjoin(sql, nout)
+
+    def _query(self, vars=None):
+        sql_clauses = self._sql_clauses(self._what, self._tables, self._where,
+                                        self._group, self._order, self._limit,
+                                        self._offset)
+        clauses = [
+            self._gen_clause(sql, val, vars) for sql, val in sql_clauses
+            if val is not None
+        ]
+        qout = SQLQuery.join(clauses)
+        if self._test:
+            return qout
+        return self.database.query(qout, processed=True)
+
+    def query(self):
+        return self._query()
+
+    def first(self):
+        query_result = self._query()
+        return query_result[0] if query_result else None
+
+    def all(self):
+        return self._query()
+
+    def order_by(self, order_vars, _reversed=False):
+        self._order = order_vars
+        return self
+        #self._order = "," .join(order_vars) if isinstance(order_vars, list) else order_vars
+
+    def limit(self, num):
+        self._limit = num
+        return self
+
+    def offset(self, num):
+        self._offset = num
+        return self
 
 
-class Select(BaseSelect):
-    pass
+class Select(object):
+    def __init__(self, database, tables, fields=None):
+        self._metadata = MetaData(database, tables)
+        self._metadata._what = self._what_fields(fields)
+
+    def _opt_where(self, opt, **kwargs):
+        opt_expression = self._metadata._where_dict(kwargs,
+                                                    opt) if kwargs else ""
+        if opt_expression:
+            if self._metadata._where:
+                self._metadata._where += " AND " + opt_expression
+            else:
+                self._metadata._where = opt_expression
+        return self
+
+    def _what_fields(self, fields=None):
+        if fields and not isinstance(fields, list):
+            raise "fields must be list object."
+        return ", ".join(fields) if fields else "*"
+
+    def filter_by(self, **kwargs):
+        if not kwargs:
+            return
+        if "where" in kwargs and kwargs.get("where"):
+            self._metadata._where = kwargs.get("where")
+        else:
+            self._metadata._where = kwargs
+        return self._metadata
+
+    def get(self, **kwargs):
+        if kwargs:
+            self._metadata._where = kwargs
+        if "where" in kwargs and kwargs.get("where"):
+            self._metadata._where = kwargs.get("where")
+        return self._metadata._query()
+
+    def all(self):
+        return self._metadata._query()
+
+    def count(self, distinct=None, **kwargs):
+        if kwargs:
+            self._metadata._where = kwargs
+        count_str = "COUNT(DISTINCT {})".format(
+            distinct) if distinct else "COUNT(*)"
+        self._metadata._what = count_str + " AS COUNT"
+        query_result = self._metadata._query()
+        return query_result[0]["COUNT"]
+
+    def filter(self, **kwargs):
+        if kwargs:
+            self._opt_where("=", **kwargs)
+        return self._metadata
+
+    def lt(self, **kwargs):
+        return self._opt_where("<", **kwargs)
+
+    def lte(self, **kwargs):
+        return self._opt_where("<=", **kwargs)
+
+    def gt(self, **kwargs):
+        return self._opt_where(">", **kwargs)
+
+    def gte(self, **kwargs):
+        return self._opt_where(">=", **kwargs)
+
+    def eq(self, **kwargs):
+        return self._opt_where("=", **kwargs)
+
+    def between(self, **kwargs):
+        where_clauses = []
+        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+            if not isinstance(v, list) and len(v) != 2:
+                raise "between and param is wrong."
+            where_clauses.append(k + " BETWEEN {} AND {} ".format(
+                sqlquote(v[0]), sqlquote(v[1])))
+        if not where_clauses:
+            return self
+        between_expression = SQLQuery.join(where_clauses, " AND ")
+        if self._metadata._where:
+            self._metadata._where += " AND " + between_expression
+        else:
+            self._metadata._where = between_expression
+        return self
 
 
-class Table(BaseTable):
+class Table(object):
     def __init__(self, database, table_name):
         self.ctx = database
         super(Table, self).__init__(table_name)
+
+    def bind(self, database=None):
+        self.ctx = database
+        return self
 
     def insert(self, **kwargs):
         pass
@@ -694,11 +1297,11 @@ class MySQLDB(DB):
         DB.__init__(self, db, params)
         self.supports_multiple_insert = True
 
-    #def _process_insert_query(self, query, tablename, seqname):
-    #    return query, SQLQuery('SELECT last_insert_id();')
+    def _process_insert_query(self, query, tablename, seqname):
+        return query, SQLQuery('SELECT last_insert_id();')
 
-    #def _get_insert_default_values_query(self, table):
-    #    return "INSERT INTO %s () VALUES()" % table
+    def _get_insert_default_values_query(self, table):
+        return "INSERT INTO %s () VALUES()" % table
 
 
 def import_driver(drivers, preferred=None):
