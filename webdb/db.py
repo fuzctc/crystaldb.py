@@ -1162,11 +1162,14 @@ class MetaData(object):
 
     def limit(self, num):
         self._limit = num
-        return self
+        return self._query()
 
     def offset(self, num):
         self._offset = num
         return self
+
+    def having(self):
+        pass
 
 
 class Select(object):
@@ -1182,7 +1185,6 @@ class Select(object):
                 self._metadata._where += " AND " + opt_expression
             else:
                 self._metadata._where = opt_expression
-        return self
 
     def _what_fields(self, fields=None):
         if fields and not isinstance(fields, list):
@@ -1191,7 +1193,7 @@ class Select(object):
 
     def filter_by(self, **kwargs):
         if not kwargs:
-            return
+            return self._metadata
         if "where" in kwargs and kwargs.get("where"):
             self._metadata._where = kwargs.get("where")
         else:
@@ -1199,17 +1201,19 @@ class Select(object):
         return self._metadata
 
     def get(self, **kwargs):
-        if kwargs:
-            self._metadata._where = kwargs
         if "where" in kwargs and kwargs.get("where"):
             self._metadata._where = kwargs.get("where")
+        else:
+            self._metadata._where = kwargs
         return self._metadata._query()
 
     def all(self):
         return self._metadata._query()
 
     def count(self, distinct=None, **kwargs):
-        if kwargs:
+        if "where" in kwargs and kwargs.get("where"):
+            self._metadata._where = kwargs.get("where")
+        else:
             self._metadata._where = kwargs
         count_str = "COUNT(DISTINCT {})".format(
             distinct) if distinct else "COUNT(*)"
@@ -1252,6 +1256,24 @@ class Select(object):
         else:
             self._metadata._where = between_expression
         return self
+
+    def in_(self, **kwargs):
+        where_clauses = []
+        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+            if not isinstance(v, list):
+                raise "in param is wrong."
+            where_clauses.append(k + " IN {} ".format(sqlquote(v)))
+        if not where_clauses:
+            return self
+        in_expression = SQLQuery.join(where_clauses, " AND ")
+        if self._metadata._where:
+            self._metadata._where += " AND " + in_expression
+        else:
+            self._metadata._where = in_expression
+        return self
+
+    def query(self):
+        return self._metadata.query()
 
 
 class Table(object):
