@@ -41,7 +41,7 @@ class TestDB():
 
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
-    print(db_handle)
+    #print(db_handle)
     #sql = """select * from ab_user_01 where id=$id"""
     #params = {"id": 1}
     #query_result = db_handle.query(sql, params)
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     ###insert
     #values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35}
-    #print(db_handle.operator("user").insert(**values))
+    #print(db_handle.operator("user").insert(ignore=True, **values))
     #print(db_handle.operator("user").insert(seqname=True, **values))
     #values_list = []
     #for i in range(3):
@@ -79,14 +79,20 @@ if __name__ == "__main__":
     #print(db_handle.operator("user").multiple_insert(values_list, seqname=True))
 
     ###update
-    #where = dict(id=3)
+    #where = dict(id=5)
     #values = dict(age=20, name="xiao1")
     ##print(db_handle.operator("user").update(where, age=19, name="xiao2"))
     #print(db_handle.operator("user").update(where, **values))
 
     ###delete
-    where = dict(id=3)
-    print(db_handle.operator("user").delete(where))
+    #where = dict(id=5)
+    #print(db_handle.operator("user").delete(where))
+
+
+    ####insert update
+    #where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
+    #values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    #print(db_handle.operator("user").insert_duplicate_update(where, **values))
 
 
     ###table

@@ -741,11 +741,23 @@ class DB(object):
     def insert(self,
                tablename,
                seqname=None,
+               ignore=None,
                test=False,
                default=False,
                **values):
         return Operator(self, tablename, test, default).insert(
-            seqname, **values)
+            seqname, ignore, **values)
+
+    def insert_duplicate_update(self,
+                                tablename,
+                                seqname=None,
+                                vars=None,
+                                test=False,
+                                default=False,
+                                **values):
+        return Operator(self, tablename, test,
+                        default).insert_duplicate_update(
+                            seqname, vars, **values)
 
     def multiple_insert(self,
                         tablename,
@@ -780,12 +792,15 @@ class Operator(object):
         self._test = _test
         self._default = _default
 
-    def insert(self, seqname=None, **values):
+    def insert(self, seqname=None, ignore=None, **values):
         return Insert(self.database, self.tablename, seqname, self._test,
-                      self._default).insert(**values)
+                      self._default).insert(ignore, **values)
 
-    def insert_duplicate_update(self, **kwargs):
-        pass
+    def insert_duplicate_update(self, where, seqname=None, vars=None,
+                                **values):
+        return Insert(self.database, self.tablename, seqname, self._test,
+                      self._default).insert_duplicate_update(
+                          where, vars, **values)
 
     def multiple_insert(self, values, seqname=None):
         return Insert(self.database, self.tablename, seqname, self._test,
@@ -801,16 +816,16 @@ class Operator(object):
 
 
 class BaseQuery(object):
-    def _where_dict(self, where, opt="="):
+    def _where_dict(self, where, opt="=", join=" AND "):
         where_clauses = []
         for k, v in sorted(iteritems(where), key=lambda t: t[0]):
             where_clauses.append(k + ' {} '.format(opt) + sqlquote(v))
         if where_clauses:
-            return SQLQuery.join(where_clauses, " AND ")
+            return SQLQuery.join(where_clauses, join)
         else:
             return None
 
-    def _where(self, where, vars=None):
+    def _where(self, where, vars=None, join=" AND "):
         if vars is None:
             vars = {}
         if isinstance(where, numeric_types):
@@ -819,12 +834,19 @@ class BaseQuery(object):
         elif isinstance(where, (list, tuple)) and len(where) == 2:
             where = SQLQuery(where[0], where[1])
         elif isinstance(where, dict):
-            where = self._where_dict(where)
+            where = self._where_dict(where, join=join)
         elif isinstance(where, SQLQuery):
             pass
         else:
             where = reparam(where, vars)
         return where
+
+    def _execute(self, sql_query):
+        db_cursor = self.database._db_cursor()
+        self.database._db_execute(db_cursor, sql_query)
+        if not self.database.ctx.transactions:
+            self.database.ctx.commit()
+        return db_cursor.rowcount
 
 
 class Insert(BaseQuery):
@@ -865,7 +887,7 @@ class Insert(BaseQuery):
             self.database.ctx.commit()
         return out
 
-    def insert(self, **values):
+    def insert(self, ignore=None, **values):
         """
         Inserts `values` into `tablename`. Returns current sequence ID.
         Set `seqname` to the ID if it's not the default, or to `False`
@@ -891,7 +913,9 @@ class Insert(BaseQuery):
             _values = SQLQuery.join(
                 [sqlparam(v) for v in map(lambda t: t[1], sorted_values)],
                 ', ')
-            sql_query = "INSERT INTO {} ".format(
+            head_query = "INSERT IGNORE INTO" if ignore else "INSERT INTO"
+            sql_query = "{} {} ".format(
+                head_query,
                 self.tablename) + q(_keys) + ' VALUES ' + q(_values)
         else:
             if self._default:
@@ -905,8 +929,28 @@ class Insert(BaseQuery):
 
         return self._execute(sql_query)
 
-    def insert_duplicate_update(self, **kwargs):
-        pass
+    def insert_duplicate_update(self, where=None, vars=None, **values):
+        if not where:
+            return self.insert(**values)
+        if not values:
+            raise ValueError("insert operation need values.")
+        if vars is None:
+            vars = {}
+        where = self._where(where, vars, join=" , ")
+        sorted_values = sorted(values.items(), key=lambda t: t[0])
+
+        def q(x):
+            return "(" + x + ")"
+
+        _keys = SQLQuery.join(map(lambda t: t[0], sorted_values), ', ')
+        _values = SQLQuery.join(
+            [sqlparam(v) for v in map(lambda t: t[1], sorted_values)], ', ')
+        sql_query = "INSERT INTO {} ".format(
+            self.tablename) + q(_keys) + ' VALUES ' + q(
+                _values) + " ON DUPLICATE KEY UPDATE " + where
+        if self._test:
+            return sql_query
+        return self._execute(sql_query)
 
     def multiple_insert(self, values):
         """
@@ -998,12 +1042,7 @@ class Update(BaseQuery):
 
         if self._test:
             return query
-
-        db_cursor = self.database._db_cursor()
-        self.database._db_execute(db_cursor, query)
-        if not self.database.ctx.transactions:
-            self.database.ctx.commit()
-        return db_cursor.rowcount
+        return self._execute(query)
 
 
 class Delete(BaseQuery):
@@ -1026,20 +1065,15 @@ class Delete(BaseQuery):
             vars = {}
         where = self._where(where, vars)
 
-        q = 'DELETE FROM ' + self.tablename
+        sql_query = 'DELETE FROM ' + self.tablename
         if using:
-            q += ' USING ' + sqllist(using)
+            sql_query += ' USING ' + sqllist(using)
         if where:
-            q += ' WHERE ' + where
+            sql_query += ' WHERE ' + where
 
         if self._test:
-            return q
-
-        db_cursor = self.database._db_cursor()
-        self.database._db_execute(db_cursor, q)
-        if not self.database.ctx.transactions:
-            self.database.ctx.commit()
-        return db_cursor.rowcount
+            return sql_query
+        return self._execute(sql_query)
 
 
 class MetaData(BaseQuery):
@@ -1247,17 +1281,35 @@ class Table(object):
             self.database = database
         return self
 
-    def insert(self, **kwargs):
-        pass
+    def insert(self,
+               seqname=None,
+               test=False,
+               default=None,
+               ignore=False,
+               **values):
+        return Insert(self.database, self.tables, seqname, default,
+                      test).insert(ignore, **values)
 
-    def insert_duplicate_update(self, data, conditions, **kwargs):
-        pass
+    def insert_duplicate_update(self,
+                                where,
+                                vars=None,
+                                seqname=None,
+                                test=False,
+                                **values):
+        return Insert(
+            self.database, self.tables, seqname,
+            _test=test).insert_duplicate_update(where, vars, **values)
 
-    def update(self, data, conditions, **kwargs):
-        pass
+    def update(self, where, vars=None, test=None, **values):
+        return Update(self.database, self.tables, test).update(
+            where, vars, **values)
 
     def select(self, fields=None):
         return Select(self.database, self.tables, fields)
+
+    def delete(self, where, using=None, vars=None, test=False):
+        return Delete(self.database, self.tables, test).delete(
+            where, using, vars)
 
 
 class MySQLDB(DB):
