@@ -18,6 +18,7 @@ except ImportError:
 
 from .exception import UnknownDB
 from .db import MySQLDB
+from .db import Table
 
 
 def convert_dburl_to_dict(db_url):
