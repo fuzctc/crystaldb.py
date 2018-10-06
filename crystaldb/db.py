@@ -35,7 +35,7 @@ tokenprog = re.compile(TOKEN)
 def sqlify(obj):
     """
     converts `obj` to its proper SQL version
-
+    example:
         >>> sqlify(None)
         'NULL'
         >>> sqlify(True)
