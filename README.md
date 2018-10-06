@@ -3,6 +3,7 @@
 为mysql封装的，支持原生sql和orm的组件，orm操作不需要写model。
 
 建立mysql连接
+
 .. code-block:: python
 
     import crystaldb
@@ -23,6 +24,7 @@
             debug=True)
             
 查询操作:
+
 .. code-block:: python
 
        tablename: 'user'  fields: 'id', 'name', 'age', 'birthday'
