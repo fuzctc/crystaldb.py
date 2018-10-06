@@ -5,7 +5,7 @@
 # Author: Zhichang Fu
 # Created Time: 2018-08-25 11:04:06
 # Function:
-#
+#   Exception module
 # ***********************************************************************
 
 

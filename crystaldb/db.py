@@ -4,8 +4,6 @@
 # ***********************************************************************
 # Author: Zhichang Fu
 # Created Time: 2018-08-25 11:08:53
-# Function:
-#
 # ***********************************************************************
 
 from __future__ import print_function
@@ -584,10 +582,15 @@ class Transaction:
 
 
 class DB(object):
-    """Database"""
+    """Database, which implement sql related operation method."""
 
     def __init__(self, db_module, params):
-        """Create a database"""
+        """
+        Create a database.
+        :param db_module: mysql
+        :param params: The dictionary contains parameters such as username,
+        password, etc.
+        """
 
         if 'driver' in params:
             params.pop('driver')
@@ -664,7 +667,7 @@ class DB(object):
             run_time = lambda: "%.4f" % (time.time() * 1000 - start_time)
             query, params = self._process_query(sql_query)
             out = cur.execute(query, params)
-        except:
+        except Exception:
             if self.print_flag:
                 # print('ERR:', str(sql_query), file=debug)
                 print('ERR:', str(sql_query))
@@ -692,6 +695,9 @@ class DB(object):
         Execute SQL query `sql_query` using dictionary `vars` to interpolate it.
         If `processed=True`, `vars` is a `reparam`-style list to use
         instead of interpolating.
+        :param sql_query: select `sql`.
+        :return : The result of the query is the list object of the iterator.
+        :example :
             >>> db = DB(None, {})
             >>> db.query("SELECT * FROM foo", _test=True)
             <sql: 'SELECT * FROM foo'>
@@ -733,9 +739,30 @@ class DB(object):
         return out
 
     def select(self, tables, fields=None):
+        """
+        Query method which return `Select` object.
+        :param tables : tables name.
+        :param fields : fields to be queried.
+        :return : `Select` objects which contain various query methods.
+        """
         return Select(self, tables, fields)
 
     def operator(self, tablename, test=False, default=False):
+        """The entry point for the write operation, including `insert`、
+        `update` and `delete` method.
+        :param tablename: table name
+        :param test: if true, return sql statement, otherwise return sql query
+            result.
+        :param default: designed for the insert method, execute the
+            default insert sql when `values` is None.
+        :return : `Oerator` object which contain `insert`、`update` and
+            `delete` method.
+        :example:
+            tablename is `user`, which having age, name and birthday fields.
+            `db_handle.operator("user").insert(**values)`.
+            `db_handle.operator("user").update(where, age=19, name="xiao2")`.
+            `db_handle.operator("user").delete(dict(id=1))`
+            """
         return Operator(self, tablename, test, default)
 
     def insert(self,
@@ -745,6 +772,18 @@ class DB(object):
                test=False,
                default=False,
                **values):
+        """Insert method that execute through `Operate` object.
+        :param tablename: tablename which you wanna be write data.
+        :param seqname: if true, return lastest-insert-id, otherwise return
+            the row count.
+        :param ignore: if true, execute the `INSERT IGNORE INTO...` sql.
+        :param test: if true, return sql statement, otherwise return sql query
+            result.
+        :param default: execute the default insert sql when
+            `values` is None.
+        :param values: dictionary object that contains data which should save
+            to database.
+        """
         return Operator(self, tablename, test, default).insert(
             seqname, ignore, **values)
 
@@ -755,6 +794,9 @@ class DB(object):
                                 test=False,
                                 default=False,
                                 **values):
+        """Update data if it exists in `tablename`, otherwise insert new data
+        into `tablename`.
+        """
         return Operator(self, tablename, test,
                         default).insert_duplicate_update(
                             seqname, vars, **values)
@@ -765,6 +807,9 @@ class DB(object):
                         seqname=None,
                         test=False,
                         default=False):
+        """Inserts multiple rows into `tablename`. 
+        :param values: The `values` must be a list of dictioanries
+        """
         return Operator(self, tablename, test, default).multiple_insert(
             values, seqname)
 
@@ -1313,7 +1358,8 @@ class Table(object):
 
 
 class MySQLDB(DB):
-    """MySQLDB"""
+    """MySQLDB class, about importing mysqldb module and
+    and the required parameters."""
 
     def __init__(self, **params):
         db = import_driver(
