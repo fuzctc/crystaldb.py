@@ -51,8 +51,8 @@ if __name__ == "__main__":
     #print(db_handle.select_v2("ab_user_01").count(id=1))
 
     ### select
-    #print("select...........")
-    #print(db_handle.select("user").lt(id=5).gt(id=2).all().list())
+    print("select...........")
+    print(db_handle.select("user").lt(id=5).gt(id=2).all().list())
     #print(db_handle.select("user").lte(id=5).gte(id=2).all().list())
     #print(db_handle.select("user").between(id=[2, 5]).all().list())
     #print(db_handle.select("user").eq(id=2).all().list())

@@ -1,2 +1,0 @@
-# tcsql
-sql operate
