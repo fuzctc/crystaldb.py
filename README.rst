@@ -34,6 +34,7 @@ Connect to the database:
         debug=True)
 
 Query method:
+
 .. code-block:: python
     
     tablename: 'user'  fields: 'id', 'name', 'age', 'birthday'
