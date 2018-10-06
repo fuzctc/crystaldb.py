@@ -35,7 +35,7 @@ tokenprog = re.compile(TOKEN)
 def sqlify(obj):
     """
     converts `obj` to its proper SQL version
-    example:
+    :example:
         >>> sqlify(None)
         'NULL'
         >>> sqlify(True)
@@ -67,7 +67,7 @@ def sqlify(obj):
 def sqllist(lst):
     """
     Converts the arguments for use in something like a WHERE clause.
-    
+    :example:
         >>> sqllist(['a', 'b'])
         'a, b'
         >>> sqllist('a')
@@ -82,7 +82,7 @@ def sqllist(lst):
 def sqlwhere(data, grouping=' AND '):
     """
     Converts a two-tuple (key, value) iterable `data` to an SQL WHERE clause `SQLQuery`.
-    
+    :example:
         >>> sqlwhere((('cust_id', 2), ('order_id',3)))
         <sql: 'cust_id = 2 AND order_id = 3'>
         >>> sqlwhere((('order_id', 3), ('cust_id', 2)), grouping=', ')
@@ -97,6 +97,7 @@ def sqlwhere(data, grouping=' AND '):
 class SQLParam(object):
     """
     Parameter in SQLQuery.
+    :example:
         >>> q = SQLQuery(["SELECT * FROM test WHERE name=", SQLParam("joe")])
         >>> q
         <sql: "SELECT * FROM test WHERE name='joe'">
@@ -155,6 +156,9 @@ class SQLQuery(object):
     # tested in sqlquote's docstring
     def __init__(self, items=None):
         """Creates a new SQLQuery.
+        :param items:  which is a list of strings and SQLParams,
+            which get concatenated to produce the actual query.
+        :example:
             >>> SQLQuery("x")
             <sql: 'x'>
             >>> q = SQLQuery(['SELECT * FROM ', 'test', ' WHERE x=', SQLParam(1)])
@@ -221,6 +225,7 @@ class SQLQuery(object):
     def query(self, paramstyle=None):
         """
         Returns the query part of the sql query.
+        :example:
             >>> q = SQLQuery(["SELECT * FROM test WHERE name=", SQLParam('joe')])
             >>> q.query()
             'SELECT * FROM test WHERE name=%s'
@@ -245,6 +250,7 @@ class SQLQuery(object):
     def values(self):
         """
         Returns the values of the parameters used in the sql query.
+        :example:
             >>> q = SQLQuery(["SELECT * FROM test WHERE name=", SQLParam('joe')])
             >>> q.values()
             ['joe']
@@ -254,16 +260,17 @@ class SQLQuery(object):
     def join(items, sep=' ', prefix=None, suffix=None, target=None):
         """
         Joins multiple queries.
+        :param target: if target argument is provided, the items are appended to target
+            instead of creating a new SQLQuery.
+        :example:
+            >>> SQLQuery.join(['a', 'b'], ', ')
+            <sql: 'a, b'>
 
-        >>> SQLQuery.join(['a', 'b'], ', ')
-        <sql: 'a, b'>
+            Optinally, prefix and suffix arguments can be provided.
 
-        Optinally, prefix and suffix arguments can be provided.
+            >>> SQLQuery.join(['a', 'b'], ', ', prefix='(', suffix=')')
+            <sql: '(a, b)'>
 
-        >>> SQLQuery.join(['a', 'b'], ', ', prefix='(', suffix=')')
-        <sql: '(a, b)'>
-
-        If target argument is provided, the items are appended to target instead of creating a new SQLQuery.
         """
         if target is None:
             target = SQLQuery()
@@ -308,7 +315,7 @@ class SQLQuery(object):
 def sqlquote(a):
     """
     Ensures `a` is quoted properly for use in a SQL query.
-
+    :example:
         >>> 'WHERE x = ' + sqlquote(True) + ' AND y = ' + sqlquote(3)
         <sql: "WHERE x = 't' AND y = 3">
         >>> 'WHERE x = ' + sqlquote(True) + ' AND y IN ' + sqlquote([2, 3])
@@ -462,7 +469,7 @@ class SafeEval(object):
 class SQLLiteral:
     """
     Protects a string from `sqlquote`.
-
+    :example:
         >>> sqlquote('NOW()')
         <sql: "'NOW()'">
         >>> sqlquote(SQLLiteral('NOW()'))
@@ -481,6 +488,8 @@ sqlliteral = SQLLiteral
 
 def _sqllist(values):
     """
+    Convert list object to `SQLQuery` object.
+    :example:
         >>> _sqllist([1, 2, 3])
         <sql: '(1, 2, 3)'>
     """
@@ -498,7 +507,7 @@ def reparam(string_, dictionary):
     """
     Takes a string and a dictionary and interpolates the string
     using values from the dictionary. Returns an `SQLQuery` for the result.
-
+    :example:
         >>> reparam("s = $s", dict(s=True))
         <sql: "s = 't'">
         >>> reparam("s IN $s", dict(s=[1, 2]))
@@ -661,10 +670,10 @@ class DB(object):
     def _db_execute(self, cur, sql_query):
         """executes an sql query"""
         self.ctx.dbq_count += 1
+        start_time = time.time() * 1000
+        run_time = lambda: "%.4f" % (time.time() * 1000 - start_time)
 
         try:
-            start_time = time.time() * 1000
-            run_time = lambda: "%.4f" % (time.time() * 1000 - start_time)
             query, params = self._process_query(sql_query)
             out = cur.execute(query, params)
         except Exception:
@@ -814,12 +823,16 @@ class DB(object):
             values, seqname)
 
     def update(self, tables, where, vars=None, test=False, **values):
+        """Update `tables` with clause `where` (interpolated using `vars`)
+        and setting `values`."""
         return Operator(self, tables, test).update(where, vars, **values)
 
     def delete(self, tablename, where, using=None, vars=None, _test=False):
+        """Deletes from `table` with clauses `where` and `using`."""
         return Operator(self, tablename, _test).delete(where, using, vars)
 
     def _get_insert_default_values_query(self, table):
+        """Default insert sql"""
         return "INSERT INTO %s DEFAULT VALUES" % table
 
     def _process_insert_query(self, query, tablename, seqname):
@@ -829,8 +842,16 @@ class DB(object):
         """Start a transaction."""
         return Transaction(self.ctx)
 
+    def close(self):
+        """Close db connection"""
+        self.ctx.db.close()
+        self._unload_context(self.ctx)
+
 
 class Operator(object):
+    """`Operator` object that integrates write operations,
+        including insert, update, delete method."""
+
     def __init__(self, database, tablename, _test=False, _default=False):
         self.database = database
         self.tablename = tablename
@@ -861,7 +882,14 @@ class Operator(object):
 
 
 class BaseQuery(object):
+    """Base query object."""
+
     def _where_dict(self, where, opt="=", join=" AND "):
+        """Convert dictionary object into `SQLQuery` object.
+        :param where: dictionary object.
+        :param opt: mark, may be `=` or `>`, `<`
+        :param join: contection string, `AND` or `,`
+        """
         where_clauses = []
         for k, v in sorted(iteritems(where), key=lambda t: t[0]):
             where_clauses.append(k + ' {} '.format(opt) + sqlquote(v))
@@ -886,21 +914,30 @@ class BaseQuery(object):
             where = reparam(where, vars)
         return where
 
-    def _execute(self, sql_query):
+    def _execute(self, sql):
+        """Execute sql
+        :param sql: sql expression
+        :return : return row count."""
         db_cursor = self.database._db_cursor()
-        self.database._db_execute(db_cursor, sql_query)
+        self.database._db_execute(db_cursor, sql)
         if not self.database.ctx.transactions:
             self.database.ctx.commit()
         return db_cursor.rowcount
 
 
 class Insert(BaseQuery):
+    """Insert operations"""
+
     def __init__(self,
                  database,
                  tablename,
                  seqname=None,
                  _default=False,
                  _test=False):
+        """
+        :param seqname: if true, return lastest-insert-id, otherwise return
+            row count.
+        """
         self.database = database
         self.tablename = tablename
         self._test = _test
@@ -908,20 +945,20 @@ class Insert(BaseQuery):
         self.seqname = seqname
         super(BaseQuery, self).__init__()
 
-    def _execute(self, sql_query):
+    def _execute(self, sql):
         db_cursor = self.database._db_cursor()
         if self.seqname:
-            sql_query = self.database._process_insert_query(
-                sql_query, self.tablename, self.seqname)
+            sql = self.database._process_insert_query(sql, self.tablename,
+                                                      self.seqname)
 
-        if isinstance(sql_query, tuple):
+        if isinstance(sql, tuple):
             # for some databases, a separate query has to be made to find
             # the id of the inserted row.
-            q1, q2 = sql_query
+            q1, q2 = sql
             result = self.database._db_execute(db_cursor, q1)
             self.database._db_execute(db_cursor, q2)
         else:
-            result = self.database._db_execute(db_cursor, sql_query)
+            result = self.database._db_execute(db_cursor, sql)
 
         try:
             out = db_cursor.fetchone()[0]
@@ -934,17 +971,7 @@ class Insert(BaseQuery):
 
     def insert(self, ignore=None, **values):
         """
-        Inserts `values` into `tablename`. Returns current sequence ID.
-        Set `seqname` to the ID if it's not the default, or to `False`
-        if there isn't one.
-            >>> db = DB(None, {})
-            >>> q = db.insert('foo', name='bob', age=2, created=SQLLiteral('NOW()'), _test=True)
-            >>> q
-            <sql: "INSERT INTO foo (age, created, name) VALUES (2, NOW(), 'bob')">
-            >>> q.query()
-            'INSERT INTO foo (age, created, name) VALUES (%s, NOW(), %s)'
-            >>> q.values()
-            [2, 'bob']
+        Inserts `values` into `tablename`
         """
 
         def q(x):
@@ -999,17 +1026,10 @@ class Insert(BaseQuery):
 
     def multiple_insert(self, values):
         """
-        Inserts multiple rows into `tablename`. The `values` must be a list of dictioanries, 
-        one for each row to be inserted, each with the same set of keys.
-        Returns the list of ids of the inserted rows.        
-        Set `seqname` to the ID if it's not the default, or to `False`
-        if there isn't one.
-        
-            >>> db = DB(None, {})
-            >>> db.supports_multiple_insert = True
-            >>> values = [{"name": "foo", "email": "foo@example.com"}, {"name": "bar", "email": "bar@example.com"}]
-            >>> db.multiple_insert('person', values=values, _test=True)
-            <sql: "INSERT INTO person (email, name) VALUES ('foo@example.com', 'foo'), ('bar@example.com', 'bar')">
+        Inserts multiple rows into `tablename`.
+        :param values: The `values` must be a list of dictioanries,
+            one for each row to be inserted, each with the same set of keys.
+        :returns: the list of ids of the inserted rows.
         """
         if not values:
             return []
@@ -1064,17 +1084,6 @@ class Update(BaseQuery):
         """
         Update `tables` with clause `where` (interpolated using `vars`)
         and setting `values`.
-
-            >>> db = DB(None, {})
-            >>> name = 'Joseph'
-            >>> q = db.update('foo', where='name = $name', name='bob', age=2,
-            ...     created=SQLLiteral('NOW()'), vars=locals(), _test=True)
-            >>> q
-            <sql: "UPDATE foo SET age = 2, created = NOW(), name = 'bob' WHERE name = 'Joseph'">
-            >>> q.query()
-            'UPDATE foo SET age = %s, created = NOW(), name = %s WHERE name = %s'
-            >>> q.values()
-            [2, 'bob', 'Joseph']
         """
         if vars is None:
             vars = {}
@@ -1100,11 +1109,6 @@ class Delete(BaseQuery):
     def delete(self, where, using=None, vars=None):
         """
         Deletes from `table` with clauses `where` and `using`.
-
-            >>> db = DB(None, {})
-            >>> name = 'Joe'
-            >>> db.delete('foo', where='name = $name', vars=locals(), _test=True)
-            <sql: "DELETE FROM foo WHERE name = 'Joe'">
         """
         if vars is None:
             vars = {}
@@ -1122,6 +1126,8 @@ class Delete(BaseQuery):
 
 
 class MetaData(BaseQuery):
+    """Various ways to integrate query syntax"""
+
     def __init__(self, database, tables, _test=False):
         self.database = database
         self._tables = tables
@@ -1197,7 +1203,6 @@ class MetaData(BaseQuery):
     def order_by(self, order_vars, _reversed=False):
         self._order = order_vars
         return self
-        #self._order = "," .join(order_vars) if isinstance(order_vars, list) else order_vars
 
     def limit(self, num):
         self._limit = num
