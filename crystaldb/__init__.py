@@ -5,8 +5,6 @@
 # Author: Zhichang Fu
 # Created Time: 2018-08-25 10:43:22
 # Last Update: 2018-08-25 10:43:22
-# Function:
-#
 # ***********************************************************************
 
 import os
@@ -19,6 +17,8 @@ except ImportError:
 from .exception import UnknownDB
 from .db import MySQLDB
 from .db import Table
+
+__version__ = "1.0.0"
 
 
 def convert_dburl_to_dict(db_url):
