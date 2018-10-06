@@ -4,8 +4,6 @@
 
 建立mysql连接
 
-.. code-block:: python
-
     import crystaldb
 
     db_host = '127.0.0.1'
@@ -24,8 +22,6 @@
             debug=True)
             
 查询操作:
-
-.. code-block:: python
 
        tablename: 'user'  fields: 'id', 'name', 'age', 'birthday'
        db_handle.select("user").get(id=1)
