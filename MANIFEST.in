@@ -1,0 +1,4 @@
+include README.rst
+include requirements.txt
+include LICENSE
+include example.py
