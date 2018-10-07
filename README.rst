@@ -214,6 +214,7 @@ Delete Syntax: support native sql and orm.
     # -->> DELETE FROM user WHERE id = 5
 
 
+
 Get Debug Queries.
 
 .. code-block:: python
