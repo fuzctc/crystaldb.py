@@ -24,7 +24,8 @@ class TestDB():
             user=TestDB.db_user,
             passwd=TestDB.db_pass,
             db=TestDB.db_database,
-            debug=True)
+            debug=True,
+            get_debug_queries=True)
 
     @staticmethod
     def db_handle():
@@ -89,6 +90,8 @@ if __name__ == "__main__":
     print(db_handle.query(sql, values))
     print(db_handle.operator("user").insert(ignore=True, **values))
     print(db_handle.operator("user").insert(seqname=True, **values))
+     
+    #db_handle.supports_multiple_insert = False
     values_list = []
     for i in range(3):
         values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35+i}
@@ -110,6 +113,13 @@ if __name__ == "__main__":
     where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
     values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
     print(db_handle.operator("user").insert_duplicate_update(where, **values))
+
+    ###get debug queries
+    where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
+    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    print(db_handle.operator("user").insert_duplicate_update(where, **values))
+    print(db_handle.get_debug_queries_info)
+
 
 
     ###table

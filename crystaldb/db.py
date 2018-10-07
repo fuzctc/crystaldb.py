@@ -615,6 +615,15 @@ class DB(object):
             del params["debug"]
         else:
             self.print_flag = os.environ.get('debug', False)
+
+        self.get_debug_queries = False
+        self.get_debug_queries_info = {}
+        if "get_debug_queries" in params:
+            self.get_debug_queries = params.get('get_debug_queries')
+            del params["get_debug_queries"]
+        else:
+            self.get_debug_queries = os.environ.get('get_debug_queries', False)
+
         self.supports_multiple_insert = False
 
     def _getctx(self):
@@ -690,6 +699,10 @@ class DB(object):
         if self.print_flag:
             print("{} ({}): {}".format(run_time(), self.ctx.dbq_count,
                                        str(sql_query)))
+
+        if self.get_debug_queries:
+            self.get_debug_queries_info = dict(
+                run_time=run_time(), sql="{}".format(sql_query))
         return out
 
     def _process_query(self, sql_query):

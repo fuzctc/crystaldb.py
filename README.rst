@@ -185,6 +185,9 @@ Update Syntax: support native sql and orm.
     result = db_handle.operator("user").update(where, age=19, name="xiao2"))
     # -->>UPDATE user SET age = 19, name = 'xiao2' WHERE id = 5
 
+    debug_sql = db_handle.debug_queries # dict object.
+    # -->>{'run_time': '0.2793', 'sql': "UPDATE user SET age = 20, name = 'xiao1' WHERE id = 5"}
+
     values = dict(age=20, name="xiao1")
     result = db_handle.operator("user").update(where, **values))
     # -->>UPDATE user SET age = 20, name = 'xiao1' WHERE id = 5
@@ -209,3 +212,26 @@ Delete Syntax: support native sql and orm.
     where = dict(id=5)
     result = db_handle.operator("user").delete(where)
     # -->> DELETE FROM user WHERE id = 5
+
+
+Get Debug Queries.
+
+.. code-block:: python
+
+    db_handle = crystaldb.database(
+        dbn='mysql',
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        passwd=db_pass,
+        db=db_database,
+        get_debug_queries=True)
+
+    where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
+    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    result = db_handle.operator("user").insert_duplicate_update(where, **values)
+    debug_queries_info = db_handle.get_debug_queries_info
+    # -->>{'run_time': '0.2749', 'sql': "INSERT INTO user (age, birthday, gender, id, name) VALUES (20, '1995-08-02', 'girl', 4, 'xiao1') ON DUPLICATE KEY UPDATE age = 20 , birthday = '1995-08-03' , id = 4 , name = 'xiao12'"}  # run_time: unit ms
+    
+
+
