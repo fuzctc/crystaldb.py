@@ -56,7 +56,7 @@ Query Syntax:
 查询语法:
 
 
-    * native sql, support '$' or ':' symbol.
+* native sql, support '$' or ':' symbol.
 
     .. code-block:: python
         
@@ -68,7 +68,7 @@ Query Syntax:
         db_handle.query(sql, params)
 
 
-    * get or filter_by syntax
+* get or filter_by syntax
 
     .. code-block:: python
 
