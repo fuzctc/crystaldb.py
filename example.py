@@ -24,7 +24,8 @@ class TestDB():
             user=TestDB.db_user,
             passwd=TestDB.db_pass,
             db=TestDB.db_database,
-            debug=True)
+            debug=True,
+            get_debug_queries=True)
 
     @staticmethod
     def db_handle():
@@ -42,57 +43,83 @@ class TestDB():
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
     #print(db_handle)
-    #sql = """select * from ab_user_01 where id=$id"""
-    #params = {"id": 1}
-    #query_result = db_handle.query(sql, params)
-    #print(query_result)
-    #print(query_result.list())
-    #print(db_handle.select_v2("ab_user_01").get(id=1).list())
-    #print(db_handle.select_v2("ab_user_01").count(id=1))
+    sql = """select * from user where id=$id"""
+    sql = """select * from user where id>:id and gender=:gender"""
+    #>> select * from user where id>5 and gender='girl'
+    params = {"id": 5, "gender": "girl"}
+    query_result = db_handle.query(sql, params)
+    print(query_result)
+    print(query_result.list())
 
     ### select
     print("select...........")
-    print(db_handle.select("user").lt(id=5).gt(id=2).all().list())
-    #print(db_handle.select("user").lte(id=5).gte(id=2).all().list())
-    #print(db_handle.select("user").between(id=[2, 5]).all().list())
-    #print(db_handle.select("user").eq(id=2).all().list())
-    #print(
-    #    db_handle.select("user").gt(id=2).filter(
-    #        gender="girl").query().list())
-    #print(db_handle.select("user").lt(id=5, age=25).all().list())
-    #print(db_handle.select("user").in_(id=[2, 3, 4]).all().list())
-    #print(
-    #    db_handle.select("user").in_(
-    #        id=[1, 2, 3, 4], gender=["girl", "boy"]).all().list())
-    #print(
-    #    db_handle.select("user", ["id", "gender"]).in_(
-    #        id=[1, 2, 3, 4], gender=["girl", "boy"]).filter().limit(1).list())
+    query_result = db_handle.select("user").filter_by(id=2).all()
+    #>>SELECT * FROM user WHERE id = 2
+    query_result = db_handle.select("user").get(id=2)
+    #>>SELECT * FROM user WHERE id = 2
+    for item in query_result:
+        print(item)
+    print(db_handle.select("user", ["id", "name"]).lt(id=5).gt(id=2).all().list())
+    #>>SELECT id, name FROM user WHERE id < 5 AND id > 2
+    print(db_handle.select("user").lte(id=20).gte(id=2).limit(2).list())
+    #>>SELECT * FROM user WHERE id <= 20 AND id >= 2 LIMIT 2
+    print(db_handle.select("user").between(id=[2, 5]).count())
+    #>>SELECT COUNT(*) AS COUNT FROM user WHERE id BETWEEN 2 AND 5
+    print(db_handle.select("user").eq(id=2).all().list())
+    #>>SELECT * FROM user WHERE id = 2
+    print(db_handle.select("user").filter(gender="girl").order_by(["age", "name"], _reversed=True).all().list())
+    #>>SELECT * FROM user WHERE gender = 'girl' ORDER BY age DESC , name DESC
+    print(db_handle.select("user").filter(gender="girl").order_by("age").all().list())
+    #>>SELECT * FROM user WHERE gender = 'girl' ORDER BY age
+    print(db_handle.select("user").lt(id=10).filter(gender="girl").order_by("age DESC, name ASC", _reversed=False).all().list())
+    #>>SELECT * FROM user WHERE id < 10 AND gender = 'girl' ORDER BY age DESC, name ASC
+    print(
+        db_handle.select("user").gt(id=2).filter(
+            gender="girl").query().list())
+    #>>SELECT * FROM user WHERE id > 2 AND gender = 'girl'
+    print(db_handle.select("user").lt(id=5, age=25).first()) # length=1
+    #>>SELECT * FROM user WHERE age < 25 AND id < 5
+    print(
+        db_handle.select("user").in_(
+            id=[1, 2, 3, 4], gender=["girl", "boy"]).all().list())
+    #>>SELECT * FROM user WHERE gender IN ('girl', 'boy')  AND id IN (1, 2, 3, 4)
 
     ###insert
-    #values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35}
-    #print(db_handle.operator("user").insert(ignore=True, **values))
-    #print(db_handle.operator("user").insert(seqname=True, **values))
-    #values_list = []
-    #for i in range(3):
-    #    values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35+i}
-    #    values_list.append(values)
-    #print(db_handle.operator("user").multiple_insert(values_list, seqname=True))
+    sql = """insert into user set age=$age, gender=$gender, birthday=$birthday, name=$name"""
+    values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35}
+    print(db_handle.query(sql, values))
+    print(db_handle.operator("user").insert(ignore=True, **values))
+    print(db_handle.operator("user").insert(seqname=True, **values))
+     
+    #db_handle.supports_multiple_insert = False
+    values_list = []
+    for i in range(3):
+        values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35+i}
+        values_list.append(values)
+    print(db_handle.operator("user").multiple_insert(values_list, seqname=True))
 
     ###update
-    #where = dict(id=5)
-    #values = dict(age=20, name="xiao1")
-    ##print(db_handle.operator("user").update(where, age=19, name="xiao2"))
-    #print(db_handle.operator("user").update(where, **values))
+    where = dict(id=5)
+    values = dict(age=20, name="xiao1")
+    print(db_handle.operator("user").update(where, age=19, name="xiao2"))
+    print(db_handle.operator("user").update(where, **values))
 
     ###delete
-    #where = dict(id=5)
-    #print(db_handle.operator("user").delete(where))
+    where = dict(id=5)
+    print(db_handle.operator("user").delete(where))
 
 
     ####insert update
-    #where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
-    #values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
-    #print(db_handle.operator("user").insert_duplicate_update(where, **values))
+    where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
+    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    print(db_handle.operator("user").insert_duplicate_update(where, **values))
+
+    ###get debug queries
+    where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
+    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    print(db_handle.operator("user").insert_duplicate_update(where, **values))
+    print(db_handle.get_debug_queries_info)
+
 
 
     ###table
