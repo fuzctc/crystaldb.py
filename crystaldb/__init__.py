@@ -18,7 +18,7 @@ from .exception import UnknownDB
 from .db import MySQLDB
 from .db import Table
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 def convert_dburl_to_dict(db_url):
