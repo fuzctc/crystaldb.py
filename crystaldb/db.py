@@ -347,7 +347,7 @@ class Parser:
     Loosely based on <http://lfw.org/python/Itpl.py> (public domain, Ka-Ping Yee)
     """
     namechars = "abcdefghijklmnopqrstuvwxyz" \
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
 
     def __init__(self):
         self.reset()
@@ -443,8 +443,8 @@ class SafeEval(object):
     """Safe evaluator for binding params to db queries.
     """
 
-    def safeeval(self, text, mapping):
-        nodes = Parser().parse(text)
+    def safeeval(self, text, mapping, _format="$"):
+        nodes = Parser().parse(text, _format)
         return SQLQuery.join([self.eval_node(node, mapping) for node in nodes],
                              "")
 
@@ -513,7 +513,8 @@ def reparam(string_, dictionary):
         >>> reparam("s IN $s", dict(s=[1, 2]))
         <sql: 's IN (1, 2)'>
     """
-    return SafeEval().safeeval(string_, dictionary)
+    _format = ":" if ":" in string_ else "$"
+    return SafeEval().safeeval(string_, dictionary, _format)
 
 
 class Transaction:
@@ -994,7 +995,7 @@ class Insert(BaseQuery):
                 sql_query = SQLQuery(
                     self._get_insert_default_values_query(self.tablename))
             else:
-                raise "insert values is empty."
+                raise ValueError("values is empty.")
 
         if self._test:
             return sql_query
@@ -1201,7 +1202,21 @@ class MetaData(BaseQuery):
         return self._query()
 
     def order_by(self, order_vars, _reversed=False):
-        self._order = order_vars
+        """Order by syntax
+        :param order_vars: must be a string object or list object
+        :param _reversed: ASC or DESC, default ASC"""
+        if isinstance(order_vars, string_types):
+            if _reversed:
+                self._order = order_vars + " DESC "
+            else:
+                self._order = order_vars
+        elif isinstance(order_vars, list):
+            if _reversed:
+                self._order = " DESC , ".join(order_vars) + " DESC "
+            else:
+                self._order = ", ".join(order_vars)
+        else:
+            raise ValueError("Order by values is wrong.")
         return self
 
     def limit(self, num):
@@ -1221,7 +1236,7 @@ class Select(object):
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(fields)
 
-    def _opt_where(self, opt, **kwargs):
+    def _opt_where(self, opt="=", **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
                                                     opt) if kwargs else ""
         if opt_expression:
@@ -1233,7 +1248,7 @@ class Select(object):
 
     def _what_fields(self, fields=None):
         if fields and not isinstance(fields, list):
-            raise "fields must be list object."
+            raise ValueError("fields must be list object.")
         return ", ".join(fields) if fields else "*"
 
     def filter_by(self, **kwargs):
@@ -1259,7 +1274,7 @@ class Select(object):
         if "where" in kwargs and kwargs.get("where"):
             self._metadata._where = kwargs.get("where")
         else:
-            self._metadata._where = kwargs
+            self._opt_where("=", **kwargs)
         count_str = "COUNT(DISTINCT {})".format(
             distinct) if distinct else "COUNT(*)"
         self._metadata._what = count_str + " AS COUNT"
@@ -1267,9 +1282,7 @@ class Select(object):
         return query_result[0]["COUNT"]
 
     def filter(self, **kwargs):
-        if kwargs:
-            self._opt_where("=", **kwargs)
-        return self._metadata
+        return self._opt_where("=", **kwargs)
 
     def lt(self, **kwargs):
         return self._opt_where("<", **kwargs)
@@ -1290,7 +1303,8 @@ class Select(object):
         where_clauses = []
         for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
             if not isinstance(v, list) and len(v) != 2:
-                raise "between and param is wrong."
+                raise ValueError(
+                    "between param must be list object and length equal 2.")
             where_clauses.append(k + " BETWEEN {} AND {} ".format(
                 sqlquote(v[0]), sqlquote(v[1])))
         if not where_clauses:
@@ -1306,7 +1320,7 @@ class Select(object):
         where_clauses = []
         for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
             if not isinstance(v, list):
-                raise "in param is wrong."
+                raise ValueError("param must be list object")
             where_clauses.append(k + " IN {} ".format(sqlquote(v)))
         if not where_clauses:
             return self
@@ -1317,8 +1331,20 @@ class Select(object):
             self._metadata._where = in_expression
         return self
 
+    def first(self):
+        return self._metadata.first()
+
     def query(self):
         return self._metadata.query()
+
+    def order_by(self, order_vars, _reversed=False):
+        return self._metadata.order_by(order_vars, _reversed)
+
+    def limit(self, num):
+        return self._metadata.limit(num)
+
+    def offset(self, num):
+        return self._metadata.offset(num)
 
 
 class Table(object):
