@@ -58,27 +58,27 @@ Query Syntax:
 
 * native sql, support '$' or ':' symbol.
 
-    .. code-block:: python
+.. code-block:: python
         
-        # native sql, support '$' or ':' symbol.
-        sql = """select * from user where id=$id"""
-        sql = """select * from user where id>:id and gender=:gender"""
-        #>> select * from user where id>5 and gender='girl'
-        params = {"id": 5, "gender": "girl"}
-        db_handle.query(sql, params)
+    # native sql, support '$' or ':' symbol.
+    sql = """select * from user where id=$id"""
+    sql = """select * from user where id>:id and gender=:gender"""
+    # -->> select * from user where id>5 and gender='girl'
+    params = {"id": 5, "gender": "girl"}
+    db_handle.query(sql, params)
 
 
 * get or filter_by syntax
 
-    .. code-block:: python
+.. code-block:: python
 
-        query_result = db_handle.select("user").filter_by(id=2).all() #>>iterable object
-        query_result.list() #>> list object
-        #>>SELECT * FROM user WHERE id = 2
-        query_result = db_handle.select("user").get(id=2)
-        #>>SELECT * FROM user WHERE id = 2
-        for item in query_result:
-            print(item)
+    query_result = db_handle.select("user").filter_by(id=2).all() # iterable object
+    query_result.list() # list object
+    # -->>SELECT * FROM user WHERE id = 2
+    query_result = db_handle.select("user").get(id=2)
+    # -->>SELECT * FROM user WHERE id = 2
+    for item in query_result:
+        print(item)
 
     * lt or lte or gt or gte or eq syntax
 
