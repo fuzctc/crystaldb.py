@@ -6,10 +6,12 @@
 from setuptools import setup
 import os
 
-
 f = open(os.path.join(os.path.dirname(__file__), 'README.rst'))
-readme = f.read()
-f.close()
+try:
+    readme = f.read()
+    f.close()
+except:
+    readme = "a little orm"
 
 setup(
     name='crystaldb',
