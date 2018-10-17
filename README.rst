@@ -15,6 +15,13 @@ csystaldb是简单轻量级的mysql查询包，支持原生sql和orm.
 Examples
 --------
 
+Install:
+
+.. code-block:: python
+
+    pip install crystaldb
+
+
 Connect to the database:
 
 .. code-block:: python
