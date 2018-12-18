@@ -4,6 +4,8 @@
 # ***********************************************************************
 # Author: Zhichang Fu
 # Created Time: 2018-08-25 11:08:53
+# Version: 1.0.3  changed by 2018-12-09
+#   1.Add two  tables combined with join operator.
 # ***********************************************************************
 
 from __future__ import print_function
@@ -14,6 +16,7 @@ import re
 from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter)
 from .exception import UnknownParamstyle, _ItplError
 from .compat import string_types, numeric_types, PY2, iteritems
+from .config import TOKEN, OP
 
 try:
     from urllib import parse as urlparse
@@ -26,8 +29,6 @@ try:
     import ast
 except ImportError:
     ast = None
-
-TOKEN = '[ \\f\\t]*(\\\\\\r?\\n[ \\f\\t]*)*(#[^\\r\\n]*)?(((\\d+[jJ]|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)[jJ])|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)|(0[xX][\\da-fA-F]+[lL]?|0[bB][01]+[lL]?|(0[oO][0-7]+)|(0[0-7]*)[lL]?|[1-9]\\d*[lL]?))|((\\*\\*=?|>>=?|<<=?|<>|!=|//=?|[+\\-*/%&|^=<>]=?|~)|[][(){}]|(\\r?\\n|[:;.,`@]))|([uUbB]?[rR]?\'[^\\n\'\\\\]*(?:\\\\.[^\\n\'\\\\]*)*\'|[uUbB]?[rR]?"[^\\n"\\\\]*(?:\\\\.[^\\n"\\\\]*)*")|[a-zA-Z_]\\w*)'
 
 tokenprog = re.compile(TOKEN)
 
@@ -1249,7 +1250,7 @@ class Select(object):
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(fields)
 
-    def _opt_where(self, opt="=", **kwargs):
+    def _opt_where(self, opt=OP.EQ, **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
                                                     opt) if kwargs else ""
         if opt_expression:
@@ -1295,22 +1296,22 @@ class Select(object):
         return query_result[0]["COUNT"]
 
     def filter(self, **kwargs):
-        return self._opt_where("=", **kwargs)
+        return self._opt_where(OP.EQ, **kwargs)
 
     def lt(self, **kwargs):
-        return self._opt_where("<", **kwargs)
+        return self._opt_where(OP.LT, **kwargs)
 
     def lte(self, **kwargs):
-        return self._opt_where("<=", **kwargs)
+        return self._opt_where(OP.LTE, **kwargs)
 
     def gt(self, **kwargs):
-        return self._opt_where(">", **kwargs)
+        return self._opt_where(OP.GT, **kwargs)
 
     def gte(self, **kwargs):
-        return self._opt_where(">=", **kwargs)
+        return self._opt_where(OP.GTE, **kwargs)
 
     def eq(self, **kwargs):
-        return self._opt_where("=", **kwargs)
+        return self._opt_where(OP.EQ, **kwargs)
 
     def between(self, **kwargs):
         where_clauses = []

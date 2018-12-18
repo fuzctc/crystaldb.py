@@ -11,6 +11,18 @@ from .compat import (iteritems, iterkeys, itervalues, is_iter, imap, PY2,
                      text_type)
 
 
+def add_space(string, symbol=" ", direction="all"):
+    """
+    Add a placeholder to the string
+    :params direction: support left or right or all.
+    """
+    if direction == "left":
+        return "{}{}".format(symbol, string)
+    elif direction == "right":
+        return "{}{}".format(string, symbol)
+    return "{}{}{}".format(symbol, string, symbol)
+
+
 def safeunicode(obj, encoding='utf-8'):
     """
     Converts any given object to unicode string.
