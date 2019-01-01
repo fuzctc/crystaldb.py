@@ -13,10 +13,11 @@ import os
 import time
 import datetime
 import re
-from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter)
+from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter,
+                    add_space)
 from .exception import UnknownParamstyle, _ItplError
 from .compat import string_types, numeric_types, PY2, iteritems
-from .config import TOKEN, OP
+from .config import TOKEN, OP, JOIN
 
 try:
     from urllib import parse as urlparse
@@ -721,14 +722,6 @@ class DB(object):
         instead of interpolating.
         :param sql_query: select `sql`.
         :return : The result of the query is the list object of the iterator.
-        :example :
-            >>> db = DB(None, {})
-            >>> db.query("SELECT * FROM foo", _test=True)
-            <sql: 'SELECT * FROM foo'>
-            >>> db.query("SELECT * FROM foo WHERE x = $x", vars=dict(x='f'), _test=True)
-            <sql: "SELECT * FROM foo WHERE x = 'f'">
-            >>> db.query("SELECT * FROM foo WHERE x = " + sqlquote('f'), _test=True)
-            <sql: "SELECT * FROM foo WHERE x = 'f'">
         """
         if vars is None:
             vars = {}
@@ -862,6 +855,9 @@ class DB(object):
         self.ctx.db.close()
         self._unload_context(self.ctx)
 
+    def table(self, tables):
+        return Table(self, tables)
+
 
 class Operator(object):
     """`Operator` object that integrates write operations,
@@ -899,7 +895,10 @@ class Operator(object):
 class BaseQuery(object):
     """Base query object."""
 
-    def _where_dict(self, where, opt="=", join=" AND "):
+    def __init__(self):
+        self.cur_table = None
+
+    def _where_dict(self, where, opt=OP.EQ, join=" AND "):
         """Convert dictionary object into `SQLQuery` object.
         :param where: dictionary object.
         :param opt: mark, may be `=` or `>`, `<`
@@ -907,6 +906,7 @@ class BaseQuery(object):
         """
         where_clauses = []
         for k, v in sorted(iteritems(where), key=lambda t: t[0]):
+            k = "{}.{}".format(self.cur_table, k) if self.cur_table else k
             where_clauses.append(k + ' {} '.format(opt) + sqlquote(v))
         if where_clauses:
             return SQLQuery.join(where_clauses, join)
@@ -1152,13 +1152,30 @@ class MetaData(BaseQuery):
         self._order = None
         self._limit = None
         self._offset = None
+        self._join_type = None
+        self._join_expression = None
         self._test = _test
         super(MetaData, self).__init__()
+        try:
+            self.cur_table = tables if isinstance(tables,
+                                                  string_types) else tables[0]
+        except Exception:
+            self.cur_table = None
 
-    def _sql_clauses(self, what, tables, where, group, order, limit, offset):
+    def _sql_clauses(self,
+                     what,
+                     tables,
+                     where,
+                     group,
+                     order,
+                     limit,
+                     offset,
+                     join=JOIN.INNER_JOIN,
+                     join_expression=None):
         return (
             ('SELECT', what),
             ('FROM', sqllist(tables)),
+            (join, join_expression),
             ('WHERE', where),
             ('GROUP BY', group),
             ('ORDER BY', order),
@@ -1193,9 +1210,9 @@ class MetaData(BaseQuery):
         return xjoin(sql, nout)
 
     def _query(self, vars=None):
-        sql_clauses = self._sql_clauses(self._what, self._tables, self._where,
-                                        self._group, self._order, self._limit,
-                                        self._offset)
+        sql_clauses = self._sql_clauses(
+            self._what, self._tables, self._where, self._group, self._order,
+            self._limit, self._offset, self._join_type, self._join_expression)
         clauses = [
             self._gen_clause(sql, val, vars) for sql, val in sql_clauses
             if val is not None
@@ -1244,18 +1261,27 @@ class MetaData(BaseQuery):
     def having(self):
         pass
 
+    def _join(self, table, using, _join_type=JOIN.INNER_JOIN):
+        self._join_type = _join_type
+        self._join_expression = add_space(
+            "{0} {1} ON {2}.{3} = {1}.{3}".format(_join_type, table,
+                                                  self.cur_table, using))
+        self.cur_table = table
+        return self
+
 
 class Select(object):
     def __init__(self, database, tables, fields=None):
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(fields)
+        self.distinct = False
 
     def _opt_where(self, opt=OP.EQ, **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
                                                     opt) if kwargs else ""
         if opt_expression:
             if self._metadata._where:
-                self._metadata._where += " AND " + opt_expression
+                self._metadata._where += add_space(OP.AND) + opt_expression
             else:
                 self._metadata._where = opt_expression
         return self
@@ -1263,7 +1289,16 @@ class Select(object):
     def _what_fields(self, fields=None):
         if fields and not isinstance(fields, list):
             raise ValueError("fields must be list object.")
-        return ", ".join(fields) if fields else "*"
+        if fields and self._metadata.cur_table:
+            fields = [
+                "{}.{}".format(self._metadata.cur_table, field)
+                for field in fields
+            ]
+        default_fields_string = "{}.*".format(
+            self._metadata.cur_table) if self._metadata.cur_table else '*'
+        fields_string = ", ".join(fields) if fields else default_fields_string
+        return "{} {}".format(OP.DISTINCT, fields_string) if self.distinct \
+            else fields_string
 
     def filter_by(self, **kwargs):
         if not kwargs:
@@ -1288,12 +1323,19 @@ class Select(object):
         if "where" in kwargs and kwargs.get("where"):
             self._metadata._where = kwargs.get("where")
         else:
-            self._opt_where("=", **kwargs)
+            self._opt_where(OP.EQ, **kwargs)
         count_str = "COUNT(DISTINCT {})".format(
             distinct) if distinct else "COUNT(*)"
         self._metadata._what = count_str + " AS COUNT"
         query_result = self._metadata._query()
         return query_result[0]["COUNT"]
+
+    def distinct(self):
+        self.distinct = True
+        return self
+
+    def like(self, **kwargs):
+        return self._opt_where(OP.LIKE, **kwargs)
 
     def filter(self, **kwargs):
         return self._opt_where(OP.EQ, **kwargs)
@@ -1323,9 +1365,9 @@ class Select(object):
                 sqlquote(v[0]), sqlquote(v[1])))
         if not where_clauses:
             return self
-        between_expression = SQLQuery.join(where_clauses, " AND ")
+        between_expression = SQLQuery.join(where_clauses, add_space(OP.AND))
         if self._metadata._where:
-            self._metadata._where += " AND " + between_expression
+            self._metadata._where += add_space(OP.AND) + between_expression
         else:
             self._metadata._where = between_expression
         return self
@@ -1335,12 +1377,27 @@ class Select(object):
         for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
             if not isinstance(v, list):
                 raise ValueError("param must be list object")
-            where_clauses.append(k + " IN {} ".format(sqlquote(v)))
+            where_clauses.append(k + " {} {} ".format(OP.IN, sqlquote(v)))
         if not where_clauses:
             return self
-        in_expression = SQLQuery.join(where_clauses, " AND ")
+        in_expression = SQLQuery.join(where_clauses, add_space(OP.AND))
         if self._metadata._where:
-            self._metadata._where += " AND " + in_expression
+            self._metadata._where += add_space(OP.AND) + in_expression
+        else:
+            self._metadata._where = in_expression
+        return self
+
+    def not_in(self, **kwargs):
+        where_clauses = []
+        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+            if not isinstance(v, list):
+                raise ValueError("param must be list object")
+            where_clauses.append(k + " {} {} ".format(OP.NOT_IN, sqlquote(v)))
+        if not where_clauses:
+            return self
+        in_expression = SQLQuery.join(where_clauses, add_space(OP.AND))
+        if self._metadata._where:
+            self._metadata._where += add_space(OP.AND) + in_expression
         else:
             self._metadata._where = in_expression
         return self
@@ -1359,6 +1416,18 @@ class Select(object):
 
     def offset(self, num):
         return self._metadata.offset(num)
+
+    def inner_join(self, table, using, **kwargs):
+        self._metadata._join(table, using, JOIN.INNER_JOIN)
+        return self._opt_where(OP.EQ, **kwargs)
+
+    def left_join(self, table, using, **kwargs):
+        self._metadata._join(table, using, JOIN.LEFT_JOIN)
+        return self._opt_where(OP.EQ, **kwargs)
+
+    def right_join(self, table, using, **kwargs):
+        self._metadata._join(table, using, JOIN.RIGHT_JOIN)
+        return self._opt_where(OP.EQ, **kwargs)
 
 
 class Table(object):

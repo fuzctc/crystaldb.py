@@ -10,7 +10,7 @@ END
 '''
 
 
-class attrdict(dict):
+class AttrDict(dict):
     def __getattr__(self, attr):
         try:
             return self[attr]
@@ -25,16 +25,14 @@ class attrdict(dict):
         return self
 
     def __add__(self, rhs):
-        d = attrdict(self)
+        d = AttrDict(self)
         d.update(rhs)
         return d
 
 
-OP = attrdict(
+OP = AttrDict(
     AND='AND',
     OR='OR',
-    ADD='+',
-    SUB='-',
     EQ='=',
     LT='<',
     LTE='<=',
@@ -46,17 +44,13 @@ OP = attrdict(
     IS='IS',
     IS_NOT='IS NOT',
     LIKE='LIKE',
-    ILIKE='ILIKE',
-    BETWEEN='BETWEEN')
+    BETWEEN='BETWEEN',
+    DISTINCT='DISTINCT')
 
-JOIN = attrdict(
-    INNER='INNER',
-    LEFT_OUTER='LEFT OUTER',
-    RIGHT_OUTER='RIGHT OUTER',
-    FULL='FULL',
-    FULL_OUTER='FULL OUTER',
-    CROSS='CROSS',
-    NATURAL='NATURAL')
+JOIN = AttrDict(
+    INNER_JOIN='INNER JOIN',
+    LEFT_JOIN='LEFT JOIN',
+    RIGHT_JOIN='RIGHT JOIN',
+    FULL_JOIN='FULL JOIN')
 
 TOKEN = '[ \\f\\t]*(\\\\\\r?\\n[ \\f\\t]*)*(#[^\\r\\n]*)?(((\\d+[jJ]|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)[jJ])|((\\d+\\.\\d*|\\.\\d+)([eE][-+]?\\d+)?|\\d+[eE][-+]?\\d+)|(0[xX][\\da-fA-F]+[lL]?|0[bB][01]+[lL]?|(0[oO][0-7]+)|(0[0-7]*)[lL]?|[1-9]\\d*[lL]?))|((\\*\\*=?|>>=?|<<=?|<>|!=|//=?|[+\\-*/%&|^=<>]=?|~)|[][(){}]|(\\r?\\n|[:;.,`@]))|([uUbB]?[rR]?\'[^\\n\'\\\\]*(?:\\\\.[^\\n\'\\\\]*)*\'|[uUbB]?[rR]?"[^\\n"\\\\]*(?:\\\\.[^\\n"\\\\]*)*")|[a-zA-Z_]\\w*)'
-
