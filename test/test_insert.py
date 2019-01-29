@@ -8,6 +8,17 @@ from .dbmodule import TestDB
 
 
 class TestInsert(object):
+    """
+    Table:
+        CREATE TABLE `user` (
+          `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+          `gender` varchar(16) DEFAULT NULL,
+          `name` varchar(64) DEFAULT NULL,
+          `birthday` varchar(16) NOT NULL,
+          `age` int(11) unsigned NOT NULL,
+          PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    """
     @pytest.fixture(scope="module")
     def dbmodule(self):
         return TestDB.db_handle()

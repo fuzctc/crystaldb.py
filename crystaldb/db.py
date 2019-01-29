@@ -958,7 +958,7 @@ class Insert(BaseQuery):
         self._test = _test
         self._default = _default
         self.seqname = seqname
-        super(BaseQuery, self).__init__()
+        super(Insert, self).__init__()
 
     def _execute(self, sql):
         db_cursor = self.database._db_cursor()
@@ -1093,7 +1093,7 @@ class Update(BaseQuery):
         self.database = database
         self.tables = tables
         self._test = _test
-        super(BaseQuery, self).__init__()
+        super(Update, self).__init__()
 
     def update(self, where, vars=None, **values):
         """
@@ -1119,7 +1119,7 @@ class Delete(BaseQuery):
         self.database = database
         self.tablename = tablename
         self._test = _test
-        super(BaseQuery, self).__init__()
+        super(Delete, self).__init__()
 
     def delete(self, where, using=None, vars=None):
         """
