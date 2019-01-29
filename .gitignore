@@ -1,3 +1,7 @@
 *.pyc
 *.swp
 .idea/*
+*.pytest_cache
+crystaldb.egg-info
+dist
+*.txt
