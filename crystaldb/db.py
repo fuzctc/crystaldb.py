@@ -1237,11 +1237,18 @@ class MetaData(BaseQuery):
         :param order_vars: must be a string object or list object
         :param _reversed: ASC or DESC, default ASC"""
         if isinstance(order_vars, string_types):
+            order_vars = ", ".join([
+                "{}.{}".format(self.cur_table, field)
+                for field in order_vars.split(",")
+            ])
             if _reversed:
                 self._order = order_vars + " DESC "
             else:
                 self._order = order_vars
         elif isinstance(order_vars, list):
+            order_vars = [
+                "{}.{}".format(self.cur_table, field) for field in order_vars
+            ]
             if _reversed:
                 self._order = " DESC , ".join(order_vars) + " DESC "
             else:
@@ -1272,9 +1279,9 @@ class MetaData(BaseQuery):
 
 class Select(object):
     def __init__(self, database, tables, fields=None):
+        self.distinct = False
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(fields)
-        self.distinct = False
 
     def _opt_where(self, opt=OP.EQ, **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
@@ -1324,8 +1331,8 @@ class Select(object):
             self._metadata._where = kwargs.get("where")
         else:
             self._opt_where(OP.EQ, **kwargs)
-        count_str = "COUNT(DISTINCT {})".format(
-            distinct) if distinct else "COUNT(*)"
+        count_str = "COUNT(DISTINCT {}.{})".format(
+            self._metadata.cur_table, distinct) if distinct else "COUNT(*)"
         self._metadata._what = count_str + " AS COUNT"
         query_result = self._metadata._query()
         return query_result[0]["COUNT"]
@@ -1361,8 +1368,9 @@ class Select(object):
             if not isinstance(v, list) and len(v) != 2:
                 raise ValueError(
                     "between param must be list object and length equal 2.")
-            where_clauses.append(k + " BETWEEN {} AND {} ".format(
-                sqlquote(v[0]), sqlquote(v[1])))
+            where_clauses.append(
+                "{}.{}".format(self._metadata.cur_table, k) +
+                " BETWEEN {} AND {} ".format(sqlquote(v[0]), sqlquote(v[1])))
         if not where_clauses:
             return self
         between_expression = SQLQuery.join(where_clauses, add_space(OP.AND))
@@ -1377,7 +1385,8 @@ class Select(object):
         for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
             if not isinstance(v, list):
                 raise ValueError("param must be list object")
-            where_clauses.append(k + " {} {} ".format(OP.IN, sqlquote(v)))
+            where_clauses.append("{}.{}".format(self._metadata.cur_table, k) +
+                                 " {} {} ".format(OP.IN, sqlquote(v)))
         if not where_clauses:
             return self
         in_expression = SQLQuery.join(where_clauses, add_space(OP.AND))
@@ -1392,7 +1401,8 @@ class Select(object):
         for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
             if not isinstance(v, list):
                 raise ValueError("param must be list object")
-            where_clauses.append(k + " {} {} ".format(OP.NOT_IN, sqlquote(v)))
+            where_clauses.append("{}.{}".format(self._metadata.cur_table, k) +
+                                 " {} {} ".format(OP.NOT_IN, sqlquote(v)))
         if not where_clauses:
             return self
         in_expression = SQLQuery.join(where_clauses, add_space(OP.AND))

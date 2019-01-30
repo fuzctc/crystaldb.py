@@ -44,16 +44,16 @@ class TestDB():
 
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
-    #print(db_handle)
-    sql = """select * from user where id=$id"""
-    sql = """select * from user where id>:id and gender=:gender"""
-    #>> select * from user where id>5 and gender='girl'
-    params = {"id": 5, "gender": "girl"}
-    query_result = db_handle.query(sql, params)
-    print(query_result)
-    print(query_result.list())
+    ##print(db_handle)
+    #sql = """select * from user where id=$id"""
+    #sql = """select * from user where id>:id and gender=:gender"""
+    ##>> select * from user where id>5 and gender='girl'
+    #params = {"id": 5, "gender": "girl"}
+    #query_result = db_handle.query(sql, params)
+    #print(query_result)
+    #print(query_result.list())
 
-    ### select
+    #### select
     print("select...........")
     query_result = db_handle.select("user").filter_by(id=2).all()
     #>>SELECT * FROM user WHERE id = 2
@@ -62,6 +62,7 @@ if __name__ == "__main__":
     for item in query_result:
         print(item)
     print(db_handle.select("user", ["id", "name"]).lt(id=5).gt(id=2).all().list())
+    exit()
     #>>SELECT id, name FROM user WHERE id < 5 AND id > 2
     print(db_handle.select("user").lte(id=20).gte(id=2).limit(2).list())
     #>>SELECT * FROM user WHERE id <= 20 AND id >= 2 LIMIT 2
