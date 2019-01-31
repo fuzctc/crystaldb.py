@@ -18,13 +18,21 @@ class TestSelect(object):
           `age` int(11) unsigned NOT NULL,
           PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+        CREATE TABLE `user_2` (
+          `id` int(11) unsigned NOT NULL DEFAULT '0',
+          `gender` varchar(16) CHARACTER SET utf8 DEFAULT NULL,
+          `name` varchar(64) CHARACTER SET utf8 DEFAULT NULL,
+          `birthday` varchar(16) CHARACTER SET utf8 NOT NULL,
+          `age` int(11) unsigned NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
     """
 
     @pytest.fixture(scope="module")
     def dbmodule(self):
         return TestDB.db_handle()
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_row_sql(self, dbmodule):
         """
         SQL:
@@ -42,7 +50,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_get(self, dbmodule):
         """
         SQL:
@@ -57,7 +65,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_get_some_field(self, dbmodule):
         """
         SQL:
@@ -72,7 +80,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_filter(self, dbmodule):
         """
         SQL:
@@ -91,7 +99,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_filter_dict(self, dbmodule):
         """
         SQL:
@@ -109,7 +117,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_filter_lt_or_gt(self, dbmodule):
         """
         SQL:
@@ -130,7 +138,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_filter_between(self, dbmodule):
         """
         SQL:
@@ -148,7 +156,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_count(self, dbmodule):
         """
         SQL:
@@ -161,7 +169,7 @@ class TestSelect(object):
         assert result > 0
         print(result)
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_distinct_count(self, dbmodule):
         """
         SQL:
@@ -174,7 +182,7 @@ class TestSelect(object):
         assert result > 0
         print(result)
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_first(self, dbmodule):
         """
         SQL:
@@ -187,7 +195,7 @@ class TestSelect(object):
         assert isinstance(result, dict)
         print(result)
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_order_by(self, dbmodule):
         """
         SQL:
@@ -223,7 +231,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_order_by_list_reversed(self, dbmodule):
         """
         SQL:
@@ -242,7 +250,7 @@ class TestSelect(object):
         assert result.__len__() > 0
         #print(result.list())
 
-    @pytest.mark.skipif(True, reason="skipped")
+    @pytest.mark.skipif(False, reason="skipped")
     def test_orm_order_by_list_complex(self, dbmodule):
         """
         SQL:
@@ -288,6 +296,93 @@ class TestSelect(object):
         condition = dict(gender="girl")
         result = dbmodule.select("user").filter(**condition).in_(
             id=[80, 81, 82, 85]).not_in(age=[35, 36]).query()
+        print(result)
+        print(result.__len__())
+        #  result Iter object or result.list() convert to list object
+        for item in result:
+            print(item)
+        assert result.__len__() > 0
+        #print(result.list())
+
+    @pytest.mark.skipif(False, reason="skipped")
+    def test_orm_limit(self, dbmodule):
+        """
+        SQL:
+            SELECT user.* FROM user WHERE user.gender = 'girl' AND \
+                    user.id IN (80, 81, 82, 85)  AND user.age \
+                    NOT IN (35, 36)  LIMIT 10;
+        """
+        condition = dict(gender="girl")
+        result = dbmodule.select("user").filter(**condition).in_(
+            id=[80, 81, 82, 85]).not_in(age=[35, 36]).limit(10)
+        print(result)
+        print(result.__len__())
+        #  result Iter object or result.list() convert to list object
+        for item in result:
+            print(item)
+        assert result.__len__() > 0
+        #print(result.list())
+
+    @pytest.mark.skipif(False, reason="skipped")
+    def test_orm_inner_join(self, dbmodule):
+        """
+        SQL:
+            SELECT user.name, user.age, user_2.name as name2, \
+                    user_2.age as age2 FROM user INNER JOIN user_2 ON \
+                    user_2.id = user.id  WHERE user.gender = 'girl' \
+                    AND user_2.gender = 'girl';
+        """
+        condition = dict(gender="girl")
+        result = dbmodule.select(
+            "user", ["name", "age"]).filter(**condition).inner_join(
+                "user_2", using="id", fields=["name as name2", "age as age2"],
+                **condition).query()
+        print(result)
+        print(result.__len__())
+        #  result Iter object or result.list() convert to list object
+        for item in result:
+            print(item)
+        assert result.__len__() > 0
+        #print(result.list())
+
+    @pytest.mark.skipif(False, reason="skipped")
+    def test_orm_left_join(self, dbmodule):
+        """
+        SQL:
+            SELECT user.name, user.age, user_2.name as name2, \
+                    user_2.age as age2 FROM user LEFT JOIN  user_2 ON \
+                    user_2.id = user.id  WHERE user.gender = 'girl' AND \
+                    user_2.age = 35 AND user_2.gender = 'girl';
+        """
+        condition1 = dict(gender="girl")
+        condition2 = dict(gender="girl", age=35)
+        result = dbmodule.select(
+            "user", ["name", "age"]).filter(**condition1).left_join(
+                "user_2", using="id", fields=["name as name2", "age as age2"],
+                **condition2).query()
+        print(result)
+        print(result.__len__())
+        #  result Iter object or result.list() convert to list object
+        for item in result:
+            print(item)
+        assert result.__len__() > 0
+        #print(result.list())
+
+    @pytest.mark.skipif(False, reason="skipped")
+    def test_orm_right_join(self, dbmodule):
+        """
+        SQL:
+            SELECT user.name, user.age, user_2.name as name2, \
+                    user_2.age as age2 FROM user RIGHT JOIN   user_2 ON \
+                    user_2.id = user.id  WHERE user.gender = 'girl' AND \
+                    user_2.age = 35 AND user_2.gender = 'girl';
+        """
+        condition1 = dict(gender="girl")
+        condition2 = dict(gender="girl", age=35)
+        result = dbmodule.select(
+            "user", ["name", "age"]).filter(**condition1).right_join(
+                "user_2", using="id", fields=["name as name2", "age as age2"],
+                **condition2).query()
         print(result)
         print(result.__len__())
         #  result Iter object or result.list() convert to list object

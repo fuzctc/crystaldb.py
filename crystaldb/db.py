@@ -1268,11 +1268,12 @@ class MetaData(BaseQuery):
     def having(self):
         pass
 
-    def _join(self, table, using, _join_type=JOIN.INNER_JOIN):
+    def _join(self, table, using, what=None, _join_type=JOIN.INNER_JOIN):
         self._join_type = _join_type
-        self._join_expression = add_space(
-            "{0} {1} ON {2}.{3} = {1}.{3}".format(_join_type, table,
-                                                  self.cur_table, using))
+        if what:
+            self._what += ", " + what
+        self._join_expression = add_space(" {0} ON {0}.{2} = {1}.{2}".format(
+            table, self.cur_table, using))
         self.cur_table = table
         return self
 
@@ -1281,7 +1282,8 @@ class Select(object):
     def __init__(self, database, tables, fields=None):
         self.distinct = False
         self._metadata = MetaData(database, tables)
-        self._metadata._what = self._what_fields(fields)
+        self._metadata._what = self._what_fields(self._metadata.cur_table,
+                                                 fields)
 
     def _opt_where(self, opt=OP.EQ, **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
@@ -1293,16 +1295,12 @@ class Select(object):
                 self._metadata._where = opt_expression
         return self
 
-    def _what_fields(self, fields=None):
+    def _what_fields(self, cur_table, fields=None):
         if fields and not isinstance(fields, list):
             raise ValueError("fields must be list object.")
         if fields and self._metadata.cur_table:
-            fields = [
-                "{}.{}".format(self._metadata.cur_table, field)
-                for field in fields
-            ]
-        default_fields_string = "{}.*".format(
-            self._metadata.cur_table) if self._metadata.cur_table else '*'
+            fields = ["{}.{}".format(cur_table, field) for field in fields]
+        default_fields_string = "{}.*".format(cur_table) if cur_table else '*'
         fields_string = ", ".join(fields) if fields else default_fields_string
         return "{} {}".format(OP.DISTINCT, fields_string) if self.distinct \
             else fields_string
@@ -1427,16 +1425,25 @@ class Select(object):
     def offset(self, num):
         return self._metadata.offset(num)
 
-    def inner_join(self, table, using, **kwargs):
-        self._metadata._join(table, using, JOIN.INNER_JOIN)
+    def inner_join(self, table, using, fields=None, **kwargs):
+        what = None
+        if fields:
+            what = self._what_fields(table, fields)
+        self._metadata._join(table, using, what, JOIN.INNER_JOIN)
         return self._opt_where(OP.EQ, **kwargs)
 
-    def left_join(self, table, using, **kwargs):
-        self._metadata._join(table, using, JOIN.LEFT_JOIN)
+    def left_join(self, table, using, fields, **kwargs):
+        what = None
+        if fields:
+            what = self._what_fields(table, fields)
+        self._metadata._join(table, using, what, JOIN.LEFT_JOIN)
         return self._opt_where(OP.EQ, **kwargs)
 
-    def right_join(self, table, using, **kwargs):
-        self._metadata._join(table, using, JOIN.RIGHT_JOIN)
+    def right_join(self, table, using, fields, **kwargs):
+        what = None
+        if fields:
+            what = self._what_fields(table, fields)
+        self._metadata._join(table, using, what, JOIN.RIGHT_JOIN)
         return self._opt_where(OP.EQ, **kwargs)
 
 

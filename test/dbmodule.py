@@ -54,6 +54,9 @@ if __name__ == "__main__":
     #print(query_result.list())
 
     #### select
+    condition = dict(gender="girl")
+    result = db_handle.select("user", ["name", "age"]).filter(**condition).inner_join("user_2", using="id", fields=["name"], **condition).query()
+    exit()
     print("select...........")
     query_result = db_handle.select("user").filter_by(id=2).all()
     #>>SELECT * FROM user WHERE id = 2
