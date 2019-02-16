@@ -23,7 +23,7 @@ Basic Usage
 
 * **Connect to the database:**
 
-    .. code-block:: python
+   ```
     import crystaldb
 
     db_host = '127.0.0.1'
