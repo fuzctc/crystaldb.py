@@ -80,5 +80,5 @@ Basic Usage
         print(item)  # <Storage {'name': 'xiaowang', 'age': 36}>
         print(item.name) # xiaowang
     # If debug is True, the following log will be printed, time unit ms.
-    # 0.8579 (5): SELECT user.name, user.age FROM user WHERE user.age = 36 AND user.gender = 'girl'
+    # 0.8579 (1): SELECT user.name, user.age FROM user WHERE user.age = 36 AND user.gender = 'girl'
     ```
