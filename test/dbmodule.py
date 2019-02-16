@@ -6,7 +6,7 @@ sys.path.append("..")
 import crystaldb
 
 
-class TestDB():
+class TestDB(object):
     db_instance = None
     db_host = '127.0.0.1'
     db_port = 3306
@@ -17,34 +17,53 @@ class TestDB():
     def __init__(self):
         pass
 
-    @staticmethod
-    def new_db_handle():
+    @classmethod
+    def new_db_handle(cls):
         return crystaldb.database(
             dbn='mysql',
-            host=TestDB.db_host,
-            port=TestDB.db_port,
-            user=TestDB.db_user,
-            passwd=TestDB.db_pass,
-            db=TestDB.db_database,
-            debug=True,
+            host=cls.db_host,
+            port=cls.db_port,
+            user=cls.db_user,
+            passwd=cls.db_pass,
+            db=cls.db_database,
+            debug=False,
             get_debug_queries=True)
 
-    @staticmethod
-    def db_handle():
-        if not TestDB.db_instance:
+    @classmethod
+    def db_handle(cls):
+        if not cls.db_instance:
             try_cnt = 3
             while try_cnt > 0:
-                TestDB.db_instance = TestDB.new_db_handle()
-                if TestDB.db_instance:
-                    return TestDB.db_instance
+                cls.db_instance = cls.new_db_handle()
+                if cls.db_instance:
+                    return cls.db_instance
                 try_cnt = try_cnt - 1
         else:
-            return TestDB.db_instance
+            return cls.db_instance
 
 
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
     ##print(db_handle)
+    import time
+    ts = time.time()
+    for i in range(10000):
+        values = {
+            'gender': 'girl',
+            'name': 'xiaowang',
+            'birthday': '1981-08-02',
+            'age': i,
+        }
+        result = db_handle.operator("user").insert(**values)
+        #print(type(sql))
+        #print(111111)
+        #print(result.rowcount)
+        #print(result.fetchone())
+        #await result.close()
+        #time.sleep(0.2)
+    print(time.time() - ts)
+
+    exit()
     #sql = """select * from user where id=$id"""
     #sql = """select * from user where id>:id and gender=:gender"""
     ##>> select * from user where id>5 and gender='girl'

@@ -621,6 +621,7 @@ class DB(object):
             params.pop('driver')
         self.db_module = db_module
         self.params = params
+        self.raw_sql_flag = False
 
         self._ctx = threadeddict()
         # flag to enable/disable printing queries
@@ -700,6 +701,7 @@ class DB(object):
 
         try:
             query, params = self._process_query(sql_query)
+            print(222222, query, params)
             out = cur.execute(query, params)
         except Exception:
             if self.print_flag:
@@ -726,6 +728,12 @@ class DB(object):
         paramstyle = getattr(self, 'paramstyle', 'pyformat')
         query = sql_query.query(paramstyle)
         params = sql_query.values()
+        return query, params
+
+    def raw_sql(self, sql_query, values=None):
+        if not isinstance(sql_query, SQLQuery):
+            sql_query = reparam(sql_query, values)
+        query, params = self._process_query(sql_query)
         return query, params
 
     def query(self, sql_query, vars=None, processed=False, _test=False):
@@ -775,7 +783,7 @@ class DB(object):
         :param fields : fields to be queried.
         :return : `Select` objects which contain various query methods.
         """
-        return Select(self, tables, fields)
+        return Select(self, tables, fields, self.raw_sql_flag)
 
     def operator(self, tablename, test=False, default=False):
         """The entry point for the write operation, including `insert`、
@@ -793,7 +801,7 @@ class DB(object):
             `db_handle.operator("user").update(where, age=19, name="xiao2")`.
             `db_handle.operator("user").delete(dict(id=1))`
             """
-        return Operator(self, tablename, test, default)
+        return Operator(self, tablename, test, default, self.raw_sql_flag)
 
     def insert(self,
                tablename,
@@ -814,8 +822,8 @@ class DB(object):
         :param values: dictionary object that contains data which should save
             to database.
         """
-        return Operator(self, tablename, test, default).insert(
-            seqname, ignore, **values)
+        return Operator(self, tablename, test, default,
+                        self.raw_sql_flag).insert(seqname, ignore, **values)
 
     def insert_duplicate_update(self,
                                 tablename,
@@ -827,8 +835,8 @@ class DB(object):
         """Update data if it exists in `tablename`, otherwise insert new data
         into `tablename`.
         """
-        return Operator(self, tablename, test,
-                        default).insert_duplicate_update(
+        return Operator(self, tablename, test, default,
+                        self.raw_sql_flag).insert_duplicate_update(
                             seqname, vars, **values)
 
     def multiple_insert(self,
@@ -840,17 +848,19 @@ class DB(object):
         """Inserts multiple rows into `tablename`. 
         :param values: The `values` must be a list of dictioanries
         """
-        return Operator(self, tablename, test, default).multiple_insert(
-            values, seqname)
+        return Operator(self, tablename, test, default,
+                        self.raw_sql_flag).multiple_insert(values, seqname)
 
     def update(self, tables, where, vars=None, test=False, **values):
         """Update `tables` with clause `where` (interpolated using `vars`)
         and setting `values`."""
-        return Operator(self, tables, test).update(where, vars, **values)
+        return Operator(self, tables, test, self.raw_sql_flag).update(
+            where, vars, **values)
 
     def delete(self, tablename, where, using=None, vars=None, _test=False):
         """Deletes from `table` with clauses `where` and `using`."""
-        return Operator(self, tablename, _test).delete(where, using, vars)
+        return Operator(self, tablename, _test, self.raw_sql_flag).delete(
+            where, using, vars)
 
     def _get_insert_default_values_query(self, table):
         """Default insert sql"""
@@ -876,33 +886,42 @@ class Operator(object):
     """`Operator` object that integrates write operations,
         including insert, update, delete method."""
 
-    def __init__(self, database, tablename, _test=False, _default=False):
+    def __init__(self,
+                 database,
+                 tablename,
+                 _test=False,
+                 _default=False,
+                 _raw_sql_flag=False):
         self.database = database
         self.tablename = tablename
         self._test = _test
         self._default = _default
+        self._raw_sql_flag = _raw_sql_flag
 
     def insert(self, seqname=None, ignore=None, **values):
         return Insert(self.database, self.tablename, seqname, self._test,
-                      self._default).insert(ignore, **values)
+                      self._default, self._raw_sql_flag).insert(
+                          ignore, **values)
 
     def insert_duplicate_update(self, where, seqname=None, vars=None,
                                 **values):
         return Insert(self.database, self.tablename, seqname, self._test,
-                      self._default).insert_duplicate_update(
+                      self._default,
+                      self._raw_sql_flag).insert_duplicate_update(
                           where, vars, **values)
 
     def multiple_insert(self, values, seqname=None):
         return Insert(self.database, self.tablename, seqname, self._test,
-                      self._default).multiple_insert(values)
+                      self._default,
+                      self._raw_sql_flag).multiple_insert(values)
 
     def update(self, where, vars=None, **values):
-        return Update(self.database, self.tablename, self._test).update(
-            where, vars, **values)
+        return Update(self.database, self.tablename, self._test,
+                      self._raw_sql_flag).update(where, vars, **values)
 
     def delete(self, where, using=None, vars=None):
-        return Delete(self.database, self.tablename, self._test).delete(
-            where, using, vars)
+        return Delete(self.database, self.tablename, self._test,
+                      self._raw_sql_flag).delete(where, using, vars)
 
 
 class BaseQuery(object):
@@ -961,7 +980,8 @@ class Insert(BaseQuery):
                  tablename,
                  seqname=None,
                  _default=False,
-                 _test=False):
+                 _test=False,
+                 _raw_sql_flag=False):
         """
         :param seqname: if true, return lastest-insert-id, otherwise return
             row count.
@@ -971,6 +991,7 @@ class Insert(BaseQuery):
         self._test = _test
         self._default = _default
         self.seqname = seqname
+        self._raw_sql_flag = _raw_sql_flag
         super(Insert, self).__init__()
 
     def _execute(self, sql):
@@ -1024,7 +1045,7 @@ class Insert(BaseQuery):
             else:
                 raise ValueError("values is empty.")
 
-        if self._test:
+        if self._test or self._raw_sql_flag:
             return sql_query
 
         return self._execute(sql_query)
@@ -1048,7 +1069,7 @@ class Insert(BaseQuery):
         sql_query = "INSERT INTO {} ".format(
             self.tablename) + q(_keys) + ' VALUES ' + q(
                 _values) + " ON DUPLICATE KEY UPDATE " + where
-        if self._test:
+        if self._test or self._raw_sql_flag:
             return sql_query
         return self._execute(sql_query)
 
@@ -1092,7 +1113,7 @@ class Insert(BaseQuery):
                 prefix="(",
                 suffix=")")
 
-        if self._test:
+        if self._test or self._raw_sql_flag:
             return sql_query
 
         out = self._execute(sql_query)
@@ -1102,10 +1123,11 @@ class Insert(BaseQuery):
 
 
 class Update(BaseQuery):
-    def __init__(self, database, tables, _test=False):
+    def __init__(self, database, tables, _test=False, _raw_sql_flag=False):
         self.database = database
         self.tables = tables
         self._test = _test
+        self._raw_sql_flag = _raw_sql_flag
         super(Update, self).__init__()
 
     def update(self, where, vars=None, **values):
@@ -1122,16 +1144,17 @@ class Update(BaseQuery):
         query = ("UPDATE " + sqllist(self.tables) + " SET " +
                  sqlwhere(values, ', ') + " WHERE " + where)
 
-        if self._test:
+        if self._test or self._raw_sql_flag:
             return query
         return self._execute(query)
 
 
 class Delete(BaseQuery):
-    def __init__(self, database, tablename, _test=False):
+    def __init__(self, database, tablename, _test=False, _raw_sql_flag=False):
         self.database = database
         self.tablename = tablename
         self._test = _test
+        self._raw_sql_flag = _raw_sql_flag
         super(Delete, self).__init__()
 
     def delete(self, where, using=None, vars=None):
@@ -1148,7 +1171,7 @@ class Delete(BaseQuery):
         if where:
             sql_query += ' WHERE ' + where
 
-        if self._test:
+        if self._test or self._raw_sql_flag:
             return sql_query
         return self._execute(sql_query)
 
@@ -1222,7 +1245,7 @@ class MetaData(BaseQuery):
 
         return xjoin(sql, nout)
 
-    def _query(self, vars=None):
+    def _query(self, vars=None, _raw_sql_flag=False):
         sql_clauses = self._sql_clauses(
             self._what, self._tables, self._where, self._group, self._order,
             self._limit, self._offset, self._join_type, self._join_expression)
@@ -1231,12 +1254,12 @@ class MetaData(BaseQuery):
             if val is not None
         ]
         qout = SQLQuery.join(clauses)
-        if self._test:
+        if self._test or _raw_sql_flag:
             return qout
         return self.database.query(qout, processed=True)
 
-    def query(self):
-        return self._query()
+    def query(self, _raw_sql_flag=False):
+        return self._query(_raw_sql_flag=_raw_sql_flag)
 
     def first(self):
         query_result = self._query()
@@ -1292,11 +1315,12 @@ class MetaData(BaseQuery):
 
 
 class Select(object):
-    def __init__(self, database, tables, fields=None):
+    def __init__(self, database, tables, fields=None, _raw_sql_flag=False):
         self.distinct = False
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(self._metadata.cur_table,
                                                  fields)
+        self._raw_sql_flag = _raw_sql_flag
 
     def _opt_where(self, opt=OP.EQ, **kwargs):
         opt_expression = self._metadata._where_dict(kwargs,
@@ -1427,7 +1451,7 @@ class Select(object):
         return self._metadata.first()
 
     def query(self):
-        return self._metadata.query()
+        return self._metadata.query(self._raw_sql_flag)
 
     def order_by(self, order_vars, _reversed=False):
         return self._metadata.order_by(order_vars, _reversed)
