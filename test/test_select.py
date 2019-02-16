@@ -97,6 +97,7 @@ class TestSelect(object):
         for item in result:
             print(item)
         assert result.__len__() > 0
+        print(dbmodule.get_debug_queries_info)
         #print(result.list())
 
     @pytest.mark.skipif(False, reason="skipped")
@@ -389,4 +390,5 @@ class TestSelect(object):
         for item in result:
             print(item)
         assert result.__len__() > 0
+        print(dbmodule.get_debug_queries_info)
         #print(result.list())
