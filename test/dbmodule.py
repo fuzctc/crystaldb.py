@@ -26,7 +26,7 @@ class TestDB(object):
             user=cls.db_user,
             passwd=cls.db_pass,
             db=cls.db_database,
-            debug=False,
+            debug=True,
             get_debug_queries=True)
 
     @classmethod

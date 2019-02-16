@@ -55,7 +55,8 @@ class TestInsert(object):
             'birthday': '1982-08-02',
             'age': 36
         }
-        result = dbmodule.operator("user").insert(**values)
+        #result = dbmodule.operator("user").insert(**values)
+        result = dbmodule.insert("user", **values)
         assert result == 1
         print("insert result: ", result)
 
@@ -71,7 +72,8 @@ class TestInsert(object):
             'birthday': '1982-08-02',
             'age': 36
         }
-        result = dbmodule.operator("user").insert(ignore=True, **values)
+        #result = dbmodule.operator("user").insert(ignore=True, **values)
+        result = dbmodule.insert("user", ignore=True, **values)
         assert result == 1
         print("insert result: ", result)
 
@@ -88,7 +90,8 @@ class TestInsert(object):
             'birthday': '1982-08-02',
             'age': 36
         }
-        result = dbmodule.operator("user").insert(seqname=True, **values)
+        #result = dbmodule.operator("user").insert(seqname=True, **values)
+        result = dbmodule.insert("user", seqname=True, **values)
         assert result > 0
         print("insert result: ", result)
 
@@ -110,7 +113,8 @@ class TestInsert(object):
                 'age': 35 + i
             }
             values_list.append(values)
-        result = dbmodule.operator("user").multiple_insert(values_list)
+        #result = dbmodule.operator("user").multiple_insert(values_list)
+        result = dbmodule.multiple_insert("user", values_list)
         assert result == 3
         print("insert result: ", result)
 
@@ -135,7 +139,8 @@ class TestInsert(object):
                 'age': 35 + i
             }
             values_list.append(values)
-        result = dbmodule.operator("user").multiple_insert(
-            values_list, seqname=True)
+        #result = dbmodule.operator("user").multiple_insert(
+        #    values_list, seqname=True)
+        result = dbmodule.multiple_insert("user", values_list, seqname=True)
         assert isinstance(result, range)
         print("insert result: ", result)

@@ -42,7 +42,7 @@ class TestUpdate(object):
         }
         result = dbmodule.query(sql, values)
         assert result > 0
-        print("insert result: ", result)
+        print("update result: ", result)
 
     def test_orm(self, dbmodule):
         """
@@ -52,9 +52,10 @@ class TestUpdate(object):
         """
         where = dict(name="xiaoli_orm")
         values = {'gender': 'boy', 'birthday': '1981-08-02', 'age': 37}
-        result = dbmodule.operator("user").update(where, **values)
+        #result = dbmodule.operator("user").update(where, **values)
+        result = dbmodule.update("user", where, **values)
         assert result > 0
-        print("insert result: ", result)
+        print("update result: ", result)
 
     def test_orm_2(self, dbmodule):
         """
@@ -66,11 +67,8 @@ class TestUpdate(object):
         result = dbmodule.operator("user").update(
             where, age=19, birthday="1981-09-02")
         assert result > 0
-        print("insert result: ", result)
+        print("update result: ", result)
 
-    where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
-    values = dict(
-        age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
 
     def test_orm_insert_update(self, dbmodule):
         """
@@ -87,7 +85,8 @@ class TestUpdate(object):
             'birthday': '1982-08-02',
             'age': 36
         }
-        result = dbmodule.operator("user").insert_duplicate_update(
-            where, **values)
+        #result = dbmodule.operator("user").insert_duplicate_update(
+        #    where, **values)
+        result = dbmodule.insert_duplicate_update("user", where, **values)
         assert result > 0
-        print("insert result: ", result)
+        print("update result: ", result)

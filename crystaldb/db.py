@@ -701,7 +701,6 @@ class DB(object):
 
         try:
             query, params = self._process_query(sql_query)
-            print(222222, query, params)
             out = cur.execute(query, params)
         except Exception:
             if self.print_flag:
