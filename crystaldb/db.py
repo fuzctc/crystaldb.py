@@ -31,6 +31,19 @@ try:
 except ImportError:
     ast = None
 
+__all__ = [
+    "DB",
+    "Operator",
+    "SQLQuery",
+    "MySQLDB",
+    "Select",
+    "Update",
+    "Insert",
+    "Delete",
+    "Table",
+    "Transaction",
+]
+
 tokenprog = re.compile(TOKEN)
 
 
