@@ -111,8 +111,8 @@ Basic Usage
 Documentation
 ===============
 * [Insert](./doc/insert.md)
-* [Update](./doc/Update.md)
-* [Querying](./doc/Query.md)
+* [Update](./doc/update.md)
+* [Querying](./doc/query.md)
 * [Delete](./doc/delete.md)
 
 
