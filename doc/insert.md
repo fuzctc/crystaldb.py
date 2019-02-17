@@ -38,6 +38,7 @@ print("insert result: ", result)
 ## 2. Orm expression
 
 * **Basic Usage:**
+
 ```python
 values = {
             'gender': 'girl',
@@ -56,6 +57,7 @@ result = db_handle.insert("user", **values)
 ```
 
 * **Ignore:**
+
 If needs to be execute `insert ignore user ...`, syntax can be supported.
 ```python
 result = db_handle.operator("user").insert(ignore=True, **values)
@@ -67,6 +69,7 @@ result = db_handle.insert("user", ignore=True, **values)
 ```
 
 * **Return latest insert id:**
+
 ```python
 result = db_handle.operator("user").insert(seqname=True, **values)
     or
@@ -81,6 +84,7 @@ SELECT last_insert_id();
 ```
 
 * **Multiple insert:**
+
 ```python
 values_list = []
 num = 3
