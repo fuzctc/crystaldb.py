@@ -6,16 +6,16 @@
 from setuptools import setup
 import os
 
-f = open(os.path.join(os.path.dirname(__file__), 'README.rst'))
+f = open(os.path.join(os.path.dirname(__file__), 'README.md'))
 try:
     readme = f.read()
     f.close()
-except:
-    readme = "a little orm"
+except Exception:
+    readme = "CrystalDB is a simple and small ORM and  no need to provide a model."
 
 setup(
     name='crystaldb',
-    description='a little orm',
+    description='CrystalDB is a simple and small ORM and  no need to provide a model.',
     long_description=readme,
     author='Zhichang Fu',
     author_email='fuzctc@gmail.com',

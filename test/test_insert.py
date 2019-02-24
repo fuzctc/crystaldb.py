@@ -46,7 +46,7 @@ class TestInsert(object):
     def test_orm(self, dbmodule):
         """
         SQL:
-            INSERT IGNORE INTO user (age, birthday, gender, name) VALUES \
+            INSERT INTO user (age, birthday, gender, name) VALUES \
                     (36, '1982-08-02', 'girl', 'xiaoli_orm')
         """
         values = {
