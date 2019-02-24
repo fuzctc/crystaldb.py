@@ -96,11 +96,12 @@ lt(age=40).gt(age=35).lt(id=80).gt(id=60).query()
 * **between**
 ```python
 condition = dict(gender="girl")
-result = db_handle.select("user").filter(**condition).\
+result = db_handle.select("user").filter(**condition). \
         between(age=[35, 40]).between(id=[60, 80]).query()
 
 # Actual execution sql expression
-=> SELECT user.* FROM user WHERE user.gender = 'girl' AND\ user.age BETWEEN 35 AND 40  AND user.id BETWEEN 60 AND 80;
+=> SELECT user.* FROM user WHERE user.gender = 'girl' AND
+   user.age BETWEEN 35 AND 40  AND user.id BETWEEN 60 AND 80;
 ```
 
 * **count**
@@ -110,7 +111,8 @@ result = db_handle.select("user").filter(**condition).\
     between(age=[35, 40]).count() # 30
 
 # Actual execution sql expression
-=> SELECT COUNT(*) AS COUNT FROM user WHERE user.gender='girl'\    AND user.age BETWEEN 35 AND 40;
+=> SELECT COUNT(*) AS COUNT FROM user WHERE user.gender='girl' \
+   AND user.age BETWEEN 35 AND 40;
 ```
 
 * **distinct**
@@ -180,27 +182,27 @@ user.age DESC , user.name DESC;
 * **order by complex case**
 ```python
 condition = dict(gender="girl")
-result = db_handle.select("user").filter(**condition).\
+result = db_handle.select("user").filter(**condition). \
         between(age=[35, 40]).order_by("age DESC, name ASC").query()
         
-=> SELECT user.* FROM user WHERE user.gender = 'girl'\
+=> SELECT user.* FROM user WHERE user.gender = 'girl' \
 AND user.age BETWEEN 35 AND 40  ORDER BY user.age DESC, user. name ASC;
 ```
 
 * **in**
 ```python
 condition = dict(gender="girl")
-result = db_handle.select("user").filter(**condition).\
+result = db_handle.select("user").filter(**condition). \
         in_(age=[35, 36], id=[80, 81, 82, 85]).query()
         
-=> SELECT user.* FROM user WHERE user.gender = 'girl'\
+=> SELECT user.* FROM user WHERE user.gender = 'girl' \
 AND user.age IN (35, 36)  AND user.id IN (80, 81, 82, 85);
 ```
 
 * **not in**
 ```python
 condition = dict(gender="girl")
-result = db_handle.select("user").filter(**condition).\
+result = db_handle.select("user").filter(**condition). \
         in_(id=[80, 81, 82, 85]).not_in(age=[35, 36]).query()
         
 => SELECT user.* FROM user WHERE user.gender = 'girl' AND \
@@ -210,7 +212,7 @@ result = db_handle.select("user").filter(**condition).\
 * **limit**
 ```python
 condition = dict(gender="girl")
-result = db_handle.select("user").filter(**condition).\
+result = db_handle.select("user").filter(**condition). \
 in_(id=[80, 81, 82, 85]).not_in(age=[35, 36]).limit(10)
 
 => SELECT user.* FROM user WHERE user.gender = 'girl' AND \
