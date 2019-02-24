@@ -45,6 +45,9 @@ class TestDB(object):
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
     ##print(db_handle)
+    print(db_handle.select("user", ["id", "name"]).lt(id=5).gt(id=2).distinct().all().list())
+
+    exit()
     import time
     ts = time.time()
     for i in range(10000):

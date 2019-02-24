@@ -54,7 +54,7 @@ class TestSelect(object):
     def test_orm_get(self, dbmodule):
         """
         SQL:
-            SELECT DISTINCT user.* FROM user WHERE user.id = 80;
+            SELECT user.* FROM user WHERE user.id = 80;
         """
         result = dbmodule.select("user").get(id=80)
         print(result)
@@ -90,6 +90,27 @@ class TestSelect(object):
         result = dbmodule.select("user", ["name", "age"]).filter(
             age=36, gender="girl").query()  # query or all method
         #result = dbmodule.select("user", ["name", "age"]).filter(
+        #    age=36, gender="girl").all()
+        print(result)
+        print(result.__len__())
+        #  result Iter object or result.list() convert to list object
+        for item in result:
+            print(item)
+        assert result.__len__() > 0
+        print(dbmodule.get_debug_queries_info)
+        #print(result.list())
+
+    @pytest.mark.skipif(False, reason="skipped")
+    def test_orm_distinct(self, dbmodule):
+        """
+        SQL:
+            SELECT DISTINCT user.name, user.age FROM user WHERE \
+                    user.age = 36 AND user.gender = 'girl'
+        """
+        result = dbmodule.select(
+            "user", ["name", "age"], distinct=True).filter(
+                age=36, gender="girl").query()  # query or all method
+        #result = dbmodule.select("user", ["name", "age"], distinct=True).filter(
         #    age=36, gender="girl").all()
         print(result)
         print(result.__len__())
@@ -336,7 +357,9 @@ class TestSelect(object):
         condition = dict(gender="girl")
         result = dbmodule.select(
             "user", ["name", "age"]).filter(**condition).inner_join(
-                "user_2", using="id", fields=["name as name2", "age as age2"],
+                "user_2",
+                using="id",
+                fields=["name as name2", "age as age2"],
                 **condition).query()
         print(result)
         print(result.__len__())
@@ -359,7 +382,9 @@ class TestSelect(object):
         condition2 = dict(gender="girl", age=35)
         result = dbmodule.select(
             "user", ["name", "age"]).filter(**condition1).left_join(
-                "user_2", using="id", fields=["name as name2", "age as age2"],
+                "user_2",
+                using="id",
+                fields=["name as name2", "age as age2"],
                 **condition2).query()
         print(result)
         print(result.__len__())
@@ -382,7 +407,9 @@ class TestSelect(object):
         condition2 = dict(gender="girl", age=35)
         result = dbmodule.select(
             "user", ["name", "age"]).filter(**condition1).right_join(
-                "user_2", using="id", fields=["name as name2", "age as age2"],
+                "user_2",
+                using="id",
+                fields=["name as name2", "age as age2"],
                 **condition2).query()
         print(result)
         print(result.__len__())

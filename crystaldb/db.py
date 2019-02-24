@@ -775,14 +775,14 @@ class DB(object):
             self.ctx.commit()
         return out
 
-    def select(self, tables, fields=None):
+    def select(self, tables, fields=None, distinct=False):
         """
         Query method which return `Select` object.
         :param tables : tables name.
         :param fields : fields to be queried.
         :return : `Select` objects which contain various query methods.
         """
-        return Select(self, tables, fields, self.raw_sql_flag)
+        return Select(self, tables, fields, self.raw_sql_flag, distinct)
 
     def operator(self, tablename, test=False, default=False):
         """The entry point for the write operation, including `insert`、
@@ -1314,8 +1314,13 @@ class MetaData(BaseQuery):
 
 
 class Select(object):
-    def __init__(self, database, tables, fields=None, _raw_sql_flag=False):
-        self.distinct = False
+    def __init__(self,
+                 database,
+                 tables,
+                 fields=None,
+                 _raw_sql_flag=False,
+                 distinct=False):
+        self.distinct = distinct
         self._metadata = MetaData(database, tables)
         self._metadata._what = self._what_fields(self._metadata.cur_table,
                                                  fields)
