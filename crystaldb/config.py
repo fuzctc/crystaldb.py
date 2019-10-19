@@ -44,6 +44,7 @@ OP = AttrDict(
     IS='IS',
     IS_NOT='IS NOT',
     LIKE='LIKE',
+    NOT_LIKE='NOT LIKE',
     BETWEEN='BETWEEN',
     DISTINCT='DISTINCT')
 
