@@ -770,8 +770,9 @@ class DB(object):
                                 for x in db_cursor.fetchall()]
         else:
             out = db_cursor.rowcount
-            if not self.ctx.transactions:
-                self.ctx.commit()
+
+        if not self.ctx.transactions:
+            self.ctx.commit()
         return out
 
     def select(self, tables, fields=None, distinct=False):

@@ -6,8 +6,8 @@
 from setuptools import setup
 import os
 
-f = open(os.path.join(os.path.dirname(__file__), 'README.md'))
 try:
+    f = open(os.path.join(os.path.dirname(__file__), 'README.md'))
     readme = f.read()
     f.close()
 except Exception:
@@ -19,7 +19,8 @@ setup(
     long_description=readme,
     author='Zhichang Fu',
     author_email='fuzctc@gmail.com',
-    url='https://github.com/CrystalSkyZ/crystaldb.py',
+    long_description_content_type="text/markdown",
+    url='https://github.com/fuzctc/crystaldb.py.git',
     version=__import__('crystaldb').__version__,
     packages=['crystaldb'],
     include_package_data=True,
