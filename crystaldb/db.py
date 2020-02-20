@@ -13,6 +13,7 @@ import os
 import time
 import datetime
 import re
+from DBUtils.PooledDB import PooledDB
 from .utils import (threadeddict, safestr, safeunicode, storage, iterbetter,
                     add_space)
 from .exception import UnknownParamstyle, _ItplError
@@ -457,7 +458,6 @@ class Parser:
 class SafeEval(object):
     """Safe evaluator for binding params to db queries.
     """
-
     def safeeval(self, text, mapping, _format="$"):
         nodes = Parser().parse(text, _format)
         return SQLQuery.join([self.eval_node(node, mapping) for node in nodes],
@@ -490,7 +490,6 @@ class SQLLiteral:
         >>> sqlquote(SQLLiteral('NOW()'))
         <sql: 'NOW()'>
     """
-
     def __init__(self, v):
         self.v = v
 
@@ -534,14 +533,12 @@ def reparam(string_, dictionary):
 
 class Transaction:
     """Database transaction."""
-
     def __init__(self, ctx):
         self.ctx = ctx
         self.transaction_count = transaction_count = len(ctx.transactions)
 
         class transaction_engine:
             """Transaction Engine used in top level transactions."""
-
             def do_transact(self):
                 ctx.commit(unload=False)
 
@@ -553,7 +550,6 @@ class Transaction:
 
         class subtransaction_engine:
             """Transaction Engine used in sub transactions."""
-
             def query(self, q):
                 db_cursor = ctx.db.cursor()
                 ctx.db_execute(db_cursor, SQLQuery(q % transaction_count))
@@ -608,19 +604,47 @@ class Transaction:
 
 class DB(object):
     """Database, which implement sql related operation method."""
-
-    def __init__(self, db_module, params):
+    def __init__(self, db_module, params, pool=False, **kwargs):
         """
         Create a database.
         :param db_module: mysql
         :param params: The dictionary contains parameters such as username,
         password, etc.
+        :param pool: Add connection pool
+        :param kwargs: DBUtils params:
+        mincached: the initial number of idle connections in the pool
+            (the default of 0 means no connections are made at startup)
+        maxcached: the maximum number of idle connections in the pool
+            (the default value of 0 or None means unlimited pool size)
+        maxshared: maximum number of shared connections allowed
+            (the default value of 0 or None means all connections are dedicated)
+            When this maximum number is reached, connections are
+            shared if they have been requested as shareable.
+        maxconnections: maximum number of connections generally allowed
+            (the default value of 0 or None means any number of connections)
+        blocking: determines behavior when exceeding the maximum
+            (if this is set to true, block and wait until the number of
+            connections decreases, but by default an error will be reported)
+        maxusage: maximum number of reuses of a single connection
+            (the default of 0 or None means unlimited reuse)
+            When this maximum usage number of the connection is reached,
+            the connection is automatically reset (closed and reopened).
+        setsession: an optional list of SQL commands that may serve to
+            prepare the session, e.g. ["set datestyle to german", ...]
+        reset: how connections should be reset when returned to the pool
+            (False or None to rollback transcations started with begin(),
+            the default value True always issues a rollback for safety's sake)
+        failures: an optional exception class or a tuple of exception classes
+            for which the connection failover mechanism shall be applied,
+            if the default (OperationalError, InternalError) is not adequate
         """
 
         if 'driver' in params:
             params.pop('driver')
         self.db_module = db_module
         self.params = params
+        self.pool = pool
+        self.kwargs = kwargs
         self.raw_sql_flag = False
 
         self._ctx = threadeddict()
@@ -663,10 +687,10 @@ class DB(object):
             ctx.db.rollback = lambda: None
 
         def commit():
-            ctx.db.commit()
+            return ctx.db.commit()
 
         def rollback():
-            ctx.db.rollback()
+            return ctx.db.rollback()
 
         ctx.commit = commit
         ctx.rollback = rollback
@@ -675,10 +699,28 @@ class DB(object):
         del ctx.db
 
     def _connect(self, params):
+        if self.pool:
+            maxcached = self.kwargs.get("maxcached", 0)
+            mincached = self.kwargs.get("mincached", 0)
+            maxshared = self.kwargs.get("maxshared", 0)
+            maxconnections = self.kwargs.get("maxconnections", 0)
+            maxusage = self.kwargs.get("maxusage", 0)
+            return PooledDB(self.db_module,
+                            mincached=mincached,
+                            maxcached=maxcached,
+                            maxshared=maxshared,
+                            maxconnections=maxconnections,
+                            maxusage=maxusage,
+                            **params)
         return self.db_module.connect(**params)
 
     def _db_cursor(self):
-        return self.ctx.db.cursor()
+        return self.ctx.db.cursor(), None
+
+    def _db_pool_cursor(self):
+        conn = self.ctx.db.connection()
+        cursor = conn.cursor()
+        return cursor, conn
 
     def _param_marker(self):
         """Returns parameter marker based on paramstyle attribute
@@ -717,8 +759,8 @@ class DB(object):
                                        str(sql_query)))
 
         if self.get_debug_queries:
-            self.get_debug_queries_info = dict(
-                run_time=run_time(), sql="{}".format(sql_query))
+            self.get_debug_queries_info = dict(run_time=run_time(),
+                                               sql="{}".format(sql_query))
         return out
 
     def _process_query(self, sql_query):
@@ -752,7 +794,8 @@ class DB(object):
         if _test:
             return sql_query
 
-        db_cursor = self._db_cursor()
+        db_cursor, conn = self._db_pool_cursor(
+        ) if self.pool else self._db_cursor()
         self._db_execute(db_cursor, sql_query)
 
         if db_cursor.description:
@@ -766,13 +809,20 @@ class DB(object):
 
             out = iterbetter(iterwrapper())
             out.__len__ = lambda: int(db_cursor.rowcount)
-            out.list = lambda: [storage(dict(zip(names, x)))
-                                for x in db_cursor.fetchall()]
+            out.list = lambda: [
+                storage(dict(zip(names, x))) for x in db_cursor.fetchall()
+            ]
         else:
             out = db_cursor.rowcount
 
         if not self.ctx.transactions:
-            self.ctx.commit()
+            if not self.pool:
+                self.ctx.commit()
+            else:
+                conn.commit()
+        db_cursor.close()
+        if self.pool:
+            conn.close()
         return out
 
     def select(self, tables, fields=None, distinct=False):
@@ -853,13 +903,13 @@ class DB(object):
     def update(self, tables, where, vars=None, test=False, **values):
         """Update `tables` with clause `where` (interpolated using `vars`)
         and setting `values`."""
-        return Operator(self, tables, test, self.raw_sql_flag).update(
-            where, vars, **values)
+        return Operator(self, tables, test,
+                        self.raw_sql_flag).update(where, vars, **values)
 
     def delete(self, tablename, where, using=None, vars=None, _test=False):
         """Deletes from `table` with clauses `where` and `using`."""
-        return Operator(self, tablename, _test, self.raw_sql_flag).delete(
-            where, using, vars)
+        return Operator(self, tablename, _test,
+                        self.raw_sql_flag).delete(where, using, vars)
 
     def _get_insert_default_values_query(self, table):
         """Default insert sql"""
@@ -884,7 +934,6 @@ class DB(object):
 class Operator(object):
     """`Operator` object that integrates write operations,
         including insert, update, delete method."""
-
     def __init__(self,
                  database,
                  tablename,
@@ -899,8 +948,8 @@ class Operator(object):
 
     def insert(self, seqname=None, ignore=None, **values):
         return Insert(self.database, self.tablename, seqname, self._test,
-                      self._default, self._raw_sql_flag).insert(
-                          ignore, **values)
+                      self._default,
+                      self._raw_sql_flag).insert(ignore, **values)
 
     def insert_duplicate_update(self, where, seqname=None, vars=None,
                                 **values):
@@ -925,7 +974,6 @@ class Operator(object):
 
 class BaseQuery(object):
     """Base query object."""
-
     def __init__(self):
         self.cur_table = None
 
@@ -973,7 +1021,6 @@ class BaseQuery(object):
 
 class Insert(BaseQuery):
     """Insert operations"""
-
     def __init__(self,
                  database,
                  tablename,
@@ -1021,7 +1068,6 @@ class Insert(BaseQuery):
         """
         Inserts `values` into `tablename`
         """
-
         def q(x):
             return "(" + x + ")"
 
@@ -1105,12 +1151,11 @@ class Insert(BaseQuery):
         for i, row in enumerate(values):
             if i != 0:
                 sql_query.append(", ")
-            SQLQuery.join(
-                [SQLParam(row[k]) for k in keys],
-                sep=", ",
-                target=sql_query,
-                prefix="(",
-                suffix=")")
+            SQLQuery.join([SQLParam(row[k]) for k in keys],
+                          sep=", ",
+                          target=sql_query,
+                          prefix="(",
+                          suffix=")")
 
         if self._test or self._raw_sql_flag:
             return sql_query
@@ -1177,7 +1222,6 @@ class Delete(BaseQuery):
 
 class MetaData(BaseQuery):
     """Various ways to integrate query syntax"""
-
     def __init__(self, database, tables, _test=False):
         self.database = database
         self._tables = tables
@@ -1245,9 +1289,10 @@ class MetaData(BaseQuery):
         return xjoin(sql, nout)
 
     def _query(self, vars=None, _raw_sql_flag=False):
-        sql_clauses = self._sql_clauses(
-            self._what, self._tables, self._where, self._group, self._order,
-            self._limit, self._offset, self._join_type, self._join_expression)
+        sql_clauses = self._sql_clauses(self._what, self._tables, self._where,
+                                        self._group, self._order, self._limit,
+                                        self._offset, self._join_type,
+                                        self._join_expression)
         clauses = [
             self._gen_clause(sql, val, vars) for sql, val in sql_clauses
             if val is not None
@@ -1519,30 +1564,35 @@ class Table(object):
                                 seqname=None,
                                 test=False,
                                 **values):
-        return Insert(
-            self.database, self.tables, seqname,
-            _test=test).insert_duplicate_update(where, vars, **values)
+        return Insert(self.database, self.tables, seqname,
+                      _test=test).insert_duplicate_update(
+                          where, vars, **values)
 
     def update(self, where, vars=None, test=None, **values):
-        return Update(self.database, self.tables, test).update(
-            where, vars, **values)
+        return Update(self.database, self.tables,
+                      test).update(where, vars, **values)
 
     def select(self, fields=None):
         return Select(self.database, self.tables, fields)
 
     def delete(self, where, using=None, vars=None, test=False):
-        return Delete(self.database, self.tables, test).delete(
-            where, using, vars)
+        return Delete(self.database, self.tables,
+                      test).delete(where, using, vars)
 
 
 class MySQLDB(DB):
     """MySQLDB class, about importing mysqldb module and
     and the required parameters."""
-
-    def __init__(self, **params):
-        db = import_driver(
-            ["MySQLdb", "pymysql", "mysql.connector"],
-            preferred=params.pop('driver', None))
+    def __init__(self,
+                 maxcached=0,
+                 mincached=0,
+                 maxshared=0,
+                 maxconnections=0,
+                 maxusage=0,
+                 pool=False,
+                 **params):
+        db = import_driver(["MySQLdb", "pymysql", "mysql.connector"],
+                           preferred=params.pop('driver', None))
         if db.__name__ == "pymysql" or db.__name__ == "mysql.connector":
             if 'passwd' in params:
                 params['password'] = params['passwd']
@@ -1554,7 +1604,15 @@ class MySQLDB(DB):
 
         self.paramstyle = db.paramstyle = 'pyformat'  # it's both, like psycopg
         self.dbname = "mysql"
-        DB.__init__(self, db, params)
+        DB.__init__(self,
+                    db,
+                    params,
+                    pool,
+                    maxcached=maxcached,
+                    mincached=mincached,
+                    maxshared=maxshared,
+                    maxconnections=maxconnections,
+                    maxusage=maxusage)
         self.supports_multiple_insert = True
 
     def _process_insert_query(self, query, tablename, seqname):

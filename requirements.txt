@@ -1,1 +1,2 @@
 mysqlclient
+DBUtils==1.3
