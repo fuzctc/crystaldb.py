@@ -13,7 +13,8 @@ try:
 except Exception:
     readme = "CrystalDB is a simple and small ORM and  no need to provide a model."
 
-install_requires = ["mysqlclient", "DBUtils==1.3"]
+install_requires = ["mysqlclient", "DBUtils"]
+_version = "1.1.1"
 
 setup(
     name='crystaldb',
@@ -24,10 +25,10 @@ setup(
     author_email='fuzctc@gmail.com',
     long_description_content_type="text/markdown",
     url='https://github.com/fuzctc/crystaldb.py.git',
-    version=__import__('crystaldb').__version__,
+    version=_version,
     packages=['crystaldb'],
+    requires=install_requires,
     install_requires=install_requires,
     include_package_data=True,
-    exclude_package_date={'': ['.gitignore']},
-    install_requires=[],
+    exclude_package_date={'': ['.gitignore']}
 )

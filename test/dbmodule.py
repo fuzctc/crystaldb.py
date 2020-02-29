@@ -11,23 +11,30 @@ class TestDB(object):
     db_host = '127.0.0.1'
     db_port = 3306
     db_user = 'root'
-    db_pass = 'meitu123'
-    db_database = 'webdb'
+    db_pass = ''
+    db_database = 'cloud_ctrl_db'
 
     def __init__(self):
         pass
 
     @classmethod
     def new_db_handle(cls):
-        return crystaldb.database(
-            dbn='mysql',
-            host=cls.db_host,
-            port=cls.db_port,
-            user=cls.db_user,
-            passwd=cls.db_pass,
-            db=cls.db_database,
-            debug=True,
-            get_debug_queries=True)
+        return crystaldb.database(maxcached=0,
+                                  mincached=0,
+                                  maxshared=0,
+                                  maxconnections=0,
+                                  maxusage=0,
+                                  pool=True,
+                                  autocommit=True,
+                                  reset=True,
+                                  dbn='mysql',
+                                  host=cls.db_host,
+                                  port=cls.db_port,
+                                  user=cls.db_user,
+                                  passwd=cls.db_pass,
+                                  db=cls.db_database,
+                                  debug=True,
+                                  get_debug_queries=True)
 
     @classmethod
     def db_handle(cls):
@@ -45,7 +52,13 @@ class TestDB(object):
 if __name__ == "__main__":
     db_handle = TestDB.db_handle()
     ##print(db_handle)
-    print(db_handle.select("user", ["id", "name"]).lt(id=5).gt(id=2).distinct().all().list())
+    for _ in range(10):
+        result = db_handle.select("tools_ctrl_mgr").all()
+        print(result)
+    exit(0)
+    print(
+        db_handle.select(
+            "user", ["id", "name"]).lt(id=5).gt(id=2).distinct().all().list())
 
     exit()
     import time
@@ -77,7 +90,12 @@ if __name__ == "__main__":
 
     #### select
     condition = dict(gender="girl")
-    result = db_handle.select("user", ["name", "age"]).filter(**condition).inner_join("user_2", using="id", fields=["name"], **condition).query()
+    result = db_handle.select("user",
+                              ["name", "age"]).filter(**condition).inner_join(
+                                  "user_2",
+                                  using="id",
+                                  fields=["name"],
+                                  **condition).query()
     exit()
     print("select...........")
     query_result = db_handle.select("user").filter_by(id=2).all()
@@ -86,7 +104,9 @@ if __name__ == "__main__":
     #>>SELECT * FROM user WHERE id = 2
     for item in query_result:
         print(item)
-    print(db_handle.select("user", ["id", "name"]).lt(id=5).gt(id=2).all().list())
+    print(
+        db_handle.select("user",
+                         ["id", "name"]).lt(id=5).gt(id=2).all().list())
     exit()
     #>>SELECT id, name FROM user WHERE id < 5 AND id > 2
     print(db_handle.select("user").lte(id=20).gte(id=2).limit(2).list())
@@ -95,36 +115,52 @@ if __name__ == "__main__":
     #>>SELECT COUNT(*) AS COUNT FROM user WHERE id BETWEEN 2 AND 5
     print(db_handle.select("user").eq(id=2).all().list())
     #>>SELECT * FROM user WHERE id = 2
-    print(db_handle.select("user").filter(gender="girl").order_by(["age", "name"], _reversed=True).all().list())
+    print(
+        db_handle.select("user").filter(gender="girl").order_by(
+            ["age", "name"], _reversed=True).all().list())
     #>>SELECT * FROM user WHERE gender = 'girl' ORDER BY age DESC , name DESC
-    print(db_handle.select("user").filter(gender="girl").order_by("age").all().list())
+    print(
+        db_handle.select("user").filter(
+            gender="girl").order_by("age").all().list())
     #>>SELECT * FROM user WHERE gender = 'girl' ORDER BY age
-    print(db_handle.select("user").lt(id=10).filter(gender="girl").order_by("age DESC, name ASC", _reversed=False).all().list())
+    print(
+        db_handle.select("user").lt(id=10).filter(gender="girl").order_by(
+            "age DESC, name ASC", _reversed=False).all().list())
     #>>SELECT * FROM user WHERE id < 10 AND gender = 'girl' ORDER BY age DESC, name ASC
     print(
-        db_handle.select("user").gt(id=2).filter(
-            gender="girl").query().list())
+        db_handle.select("user").gt(id=2).filter(gender="girl").query().list())
     #>>SELECT * FROM user WHERE id > 2 AND gender = 'girl'
-    print(db_handle.select("user").lt(id=5, age=25).first()) # length=1
+    print(db_handle.select("user").lt(id=5, age=25).first())  # length=1
     #>>SELECT * FROM user WHERE age < 25 AND id < 5
     print(
-        db_handle.select("user").in_(
-            id=[1, 2, 3, 4], gender=["girl", "boy"]).all().list())
+        db_handle.select("user").in_(id=[1, 2, 3, 4],
+                                     gender=["girl", "boy"]).all().list())
     #>>SELECT * FROM user WHERE gender IN ('girl', 'boy')  AND id IN (1, 2, 3, 4)
 
     ###insert
     sql = """insert into user set age=$age, gender=$gender, birthday=$birthday, name=$name"""
-    values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35}
+    values = {
+        'gender': 'girl',
+        'name': 'xiaowang2',
+        'birthday': '1981-08-02',
+        'age': 35
+    }
     print(db_handle.query(sql, values))
     print(db_handle.operator("user").insert(ignore=True, **values))
     print(db_handle.operator("user").insert(seqname=True, **values))
-     
+
     #db_handle.supports_multiple_insert = False
     values_list = []
     for i in range(3):
-        values = {'gender': 'girl', 'name': 'xiaowang2', 'birthday': '1981-08-02', 'age': 35+i}
+        values = {
+            'gender': 'girl',
+            'name': 'xiaowang2',
+            'birthday': '1981-08-02',
+            'age': 35 + i
+        }
         values_list.append(values)
-    print(db_handle.operator("user").multiple_insert(values_list, seqname=True))
+    print(
+        db_handle.operator("user").multiple_insert(values_list, seqname=True))
 
     ###update
     where = dict(id=5)
@@ -136,22 +172,26 @@ if __name__ == "__main__":
     where = dict(id=5)
     print(db_handle.operator("user").delete(where))
 
-
     ####insert update
     where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
-    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    values = dict(age=20,
+                  name="xiao1",
+                  birthday="1995-08-02",
+                  id=4,
+                  gender="girl")
     print(db_handle.operator("user").insert_duplicate_update(where, **values))
 
     ###get debug queries
     where = dict(id=4, age=20, name="xiao12", birthday="1995-08-03")
-    values = dict(age=20, name="xiao1", birthday="1995-08-02", id=4, gender="girl")
+    values = dict(age=20,
+                  name="xiao1",
+                  birthday="1995-08-02",
+                  id=4,
+                  gender="girl")
     print(db_handle.operator("user").insert_duplicate_update(where, **values))
     print(db_handle.get_debug_queries_info)
-
-
 
     ###table
     #print("table...........")
     #print(crystaldb.Table(db_handle, "user").select().lt(id=5).gt(id=2).all().list())
     #print(crystaldb.Table(db_handle, "user").select(["id", "gender", "age"]).lt(id=5).gt(id=2).all().list())
-
