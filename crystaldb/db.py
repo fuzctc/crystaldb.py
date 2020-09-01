@@ -1006,7 +1006,7 @@ class BaseQuery(object):
         :param join: contection string, `AND` or `,`
         """
         where_clauses = []
-        for k, v in sorted(iteritems(where), key=lambda t: t[0]):
+        for k, v in where.items():
             k = "{}.{}".format(self.cur_table, k) if self.cur_table else k
             where_clauses.append(k + ' {} '.format(opt) + sqlquote(v))
         if where_clauses:
@@ -1495,7 +1495,7 @@ class Select(object):
 
     def between(self, **kwargs):
         where_clauses = []
-        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+        for k, v in kwargs.items():
             if not isinstance(v, list) and len(v) != 2:
                 raise ValueError(
                     "between param must be list object and length equal 2.")
@@ -1513,7 +1513,7 @@ class Select(object):
 
     def in_(self, **kwargs):
         where_clauses = []
-        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+        for k, v in kwargs.items():
             if not isinstance(v, list):
                 raise ValueError("param must be list object")
             where_clauses.append("{}.{}".format(self._metadata.cur_table, k) +
@@ -1529,7 +1529,7 @@ class Select(object):
 
     def not_in(self, **kwargs):
         where_clauses = []
-        for k, v in sorted(iteritems(kwargs), key=lambda t: t[0]):
+        for k, v in kwargs.items():
             if not isinstance(v, list):
                 raise ValueError("param must be list object")
             where_clauses.append("{}.{}".format(self._metadata.cur_table, k) +
