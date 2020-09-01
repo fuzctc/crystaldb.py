@@ -1383,6 +1383,9 @@ class Select(object):
     def like(self, **kwargs):
         return self._opt_where(OP.LIKE, **kwargs)
 
+    def not_like(self, **kwargs):
+        return self._opt_where(OP.NOT_LIKE, **kwargs)
+
     def filter(self, **kwargs):
         return self._opt_where(OP.EQ, **kwargs)
 
@@ -1400,6 +1403,9 @@ class Select(object):
 
     def eq(self, **kwargs):
         return self._opt_where(OP.EQ, **kwargs)
+
+    def ne(self, **kwargs):
+        return self._opt_where(OP.NE, **kwargs)
 
     def between(self, **kwargs):
         where_clauses = []

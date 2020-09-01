@@ -11,7 +11,7 @@ import os
 try:
     from urllib.parse import urlparse, unquote
 except ImportError:
-    import urlparse
+    from urlparse import urlparse
     from urllib import unquote
 
 from .exception import UnknownDB
@@ -27,7 +27,7 @@ def convert_dburl_to_dict(db_url):
     dburl example:
         'mysql://username:password@hostname:port/dbname'
     """
-    parse_result = urlparse.urlparse(unquote(db_url))
+    parse_result = urlparse(unquote(db_url))
     db_params = dict(
         dbn=parse_result.scheme,
         username=parse_result.username,
